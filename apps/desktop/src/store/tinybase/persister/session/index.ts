@@ -1,0 +1,35 @@
+import * as _UI from "tinybase/ui-react/with-schemas";
+
+import { getCurrentWebviewWindowLabel } from "@openmushi/plugin-windows";
+import type { Schemas } from "@openmushi/store";
+
+import { initSessionOps } from "./ops";
+import { createSessionPersister } from "./persister";
+
+import type { Store } from "~/store/tinybase/store/main";
+
+const { useCreatePersister } = _UI as _UI.WithSchemas<Schemas>;
+
+export function useSessionPersister(store: Store) {
+  return useCreatePersister(
+    store,
+    async (store) => {
+      const persister = createSessionPersister(store as Store);
+      if (getCurrentWebviewWindowLabel() === "main") {
+        await persister.startAutoPersisting();
+      } else {
+        await persister.startAutoLoad();
+      }
+
+      initSessionOps({
+        store: store as Store,
+        reloadSessions: async () => {
+          await persister.load();
+        },
+      });
+
+      return persister;
+    },
+    [],
+  );
+}

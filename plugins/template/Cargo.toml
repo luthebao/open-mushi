@@ -1,0 +1,27 @@
+[package]
+name = "tauri-plugin-template"
+version = "0.1.0"
+authors = ["You"]
+edition = "2024"
+exclude = ["/node_modules"]
+links = "tauri-plugin-template"
+description = ""
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }
+
+[dev-dependencies]
+specta-typescript = { workspace = true }
+
+[dependencies]
+openmushi-gbnf = { workspace = true }
+openmushi-template-app = { workspace = true }
+openmushi-template-app-legacy = { workspace = true }
+openmushi-template-support = { workspace = true }
+
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+specta = { workspace = true, features = ["serde_json"] }
+tauri = { workspace = true, features = ["test"] }
+tauri-specta = { workspace = true, features = ["derive", "typescript"] }

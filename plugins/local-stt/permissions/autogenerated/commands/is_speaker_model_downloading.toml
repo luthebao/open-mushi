@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-is-speaker-model-downloading"
+description = "Enables the is_speaker_model_downloading command without any pre-configured scope."
+commands.allow = ["is_speaker_model_downloading"]
+
+[[permission]]
+identifier = "deny-is-speaker-model-downloading"
+description = "Denies the is_speaker_model_downloading command without any pre-configured scope."
+commands.deny = ["is_speaker_model_downloading"]

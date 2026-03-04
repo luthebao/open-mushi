@@ -1,0 +1,20 @@
+[package]
+name = "notification"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["legacy"]
+legacy = ["dep:openmushi-notification-macos", "dep:openmushi-notification-linux"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+
+openmushi-notification-interface = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+openmushi-notification-macos = { path = "../notification-macos", package = "notification-macos", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openmushi-notification-linux = { path = "../notification-linux", package = "notification-linux", optional = true }

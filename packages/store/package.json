@@ -1,0 +1,20 @@
+{
+  "name": "@openmushi/store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./shared": "./src/shared.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "tinybase": "^7.3.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  }
+}

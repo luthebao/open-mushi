@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Open Mushi",
+  "mainBinaryName": "openmushi",
+  "identifier": "com.openmushi.stable",
+  "plugins": {
+    "deep-link": {
+      "desktop": { "schemes": ["openmushi"] }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "// REMOVE: https://desktop2.hyprnote.com/update/{{target}}-{{arch}}/{{current_version}}?channel=stable"
+      ]
+    }
+  }
+}

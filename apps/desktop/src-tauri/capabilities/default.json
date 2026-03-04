@@ -1,0 +1,103 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-center",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-is-maximized",
+    "core:window:allow-toggle-maximize",
+    "apple-calendar:default",
+    "apple-contact:default",
+    "audio-priority:default",
+    "db2:default",
+    "windows:default",
+    "tracing:default",
+    "tray:default",
+    "updater:default",
+    "updater2:default",
+    "deep-link:default",
+    "deeplink2:default",
+    "store:default",
+    "store2:default",
+    "process:default",
+    "local-stt:default",
+    "dialog:default",
+    "hooks:default",
+    "icon:default",
+    "importer:default",
+    "listener:default",
+    "template:default",
+    "notification:default",
+    "overlay:default",
+    "notify:default",
+    "tantivy:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "exec-sh",
+          "cmd": "sh",
+          "args": [
+            "-c",
+            {
+              "validator": ".+"
+            }
+          ]
+        }
+      ]
+    },
+    "misc:default",
+    "fs-db:default",
+    "fs-sync:default",
+    "fs2:default",
+    "git:default",
+    "google-calendar:default",
+    "os:default",
+    "opener2:default",
+    "mcp:default",
+    "detect:default",
+    "dock:default",
+    "permissions:default",
+    "screen:default",
+    "settings:default",
+    "sfx:default",
+    "path2:default",
+    "pdf:default",
+    "autostart:default",
+    "js:default",
+    "flag:default",
+    {
+      "identifier": "http:default",
+      "deny": [],
+      "allow": [
+        {
+          "url": "http://localhost:*/**"
+        },
+        {
+          "url": "http://*.*.*.*:*/**"
+        },
+        {
+          "url": "https://**"
+        },
+        {
+          "url": "http://**"
+        }
+      ]
+    }
+  ]
+}

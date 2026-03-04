@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Open Mushi",
+  "mainBinaryName": "openmushi",
+  "identifier": "com.openmushi.OpenMushi",
+  "plugins": {
+    "updater": {
+      "active": false
+    }
+  }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "db-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+openmushi-db-core = { workspace = true }
+openmushi-db-user = { workspace = true }
+openmushi-importer-core = { workspace = true }
+owhisper-interface = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+htmd = { workspace = true }
+
+[dev-dependencies]
+dirs = { workspace = true }
+tokio = { workspace = true }

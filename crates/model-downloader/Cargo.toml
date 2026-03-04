@@ -1,0 +1,21 @@
+[package]
+name = "model-downloader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+openmushi-download-interface = { workspace = true }
+openmushi-file = { workspace = true }
+
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "fs", "sync"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+bzip2 = "0.5"
+tar = "0.4"
+zip = "2"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+wiremock = { workspace = true }

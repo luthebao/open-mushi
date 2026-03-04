@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Open Mushi
+GenericName=AI Meeting Notes
+Comment=The AI notepad for private meetings
+Exec=openmushi %U
+Icon=com.openmushi.OpenMushi
+Terminal=false
+Type=Application
+Categories=Office;AudioVideo;Recorder;
+Keywords=notes;meeting;transcription;ai;audio;recording;
+StartupNotify=true
+StartupWMClass=openmushi
+MimeType=x-scheme-handler/openmushi;

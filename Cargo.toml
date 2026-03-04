@@ -1,0 +1,310 @@
+[profile.dev]
+incremental = true
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
+
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "crates/*",
+  "plugins/*",
+]
+exclude = ["plugins/cli2", "plugins/db", "plugins/export", "plugins/analytics-stub", "crates/vad-ext"]
+
+[workspace.dependencies]
+openmushi-aec = { path = "crates/aec", package = "aec" }
+openmushi-afconvert = { path = "crates/afconvert", package = "afconvert" }
+openmushi-agc = { path = "crates/agc", package = "agc" }
+openmushi-am = { path = "crates/am", package = "am" }
+openmushi-apple-calendar = { path = "crates/apple-calendar", package = "apple-calendar" }
+openmushi-apple-note = { path = "crates/apple-note", package = "apple-note" }
+openmushi-askama-utils = { path = "crates/askama-utils", package = "askama-utils" }
+openmushi-audio = { path = "crates/audio", package = "audio" }
+openmushi-audio-device = { path = "crates/audio-device", package = "audio-device" }
+openmushi-audio-interface = { path = "crates/audio-interface", package = "audio-interface" }
+openmushi-audio-mime = { path = "crates/audio-mime", package = "audio-mime" }
+openmushi-audio-snapshot = { path = "crates/audio-snapshot", package = "audio-snapshot" }
+openmushi-audio-utils = { path = "crates/audio-utils", package = "audio-utils" }
+openmushi-buffer = { path = "crates/buffer", package = "buffer" }
+openmushi-bundle = { path = "crates/bundle", package = "bundle" }
+openmushi-calendar-interface = { path = "crates/calendar-interface", package = "calendar-interface" }
+openmushi-data = { path = "crates/data", package = "data" }
+openmushi-db-core = { path = "crates/db-core", package = "db-core" }
+openmushi-db-parser = { path = "crates/db-parser", package = "db-parser" }
+openmushi-db-user = { path = "crates/db-user", package = "db-user" }
+openmushi-denoise = { path = "crates/denoise", package = "denoise" }
+openmushi-detect = { path = "crates/detect", package = "detect" }
+openmushi-device-monitor = { path = "crates/device-monitor", package = "device-monitor" }
+openmushi-docs = { path = "crates/docs", package = "docs" }
+openmushi-download-interface = { path = "crates/download-interface", package = "download-interface" }
+openmushi-file = { path = "crates/file", package = "file" }
+openmushi-frontmatter = { path = "crates/frontmatter", package = "frontmatter" }
+openmushi-fs-format = { path = "crates/fs-format", package = "fs-format" }
+openmushi-gbnf = { path = "crates/gbnf", package = "gbnf" }
+openmushi-gguf = { path = "crates/gguf", package = "gguf" }
+openmushi-google-calendar = { path = "crates/google-calendar", package = "google-calendar" }
+openmushi-google-drive = { path = "crates/google-drive", package = "google-drive" }
+openmushi-hf = { path = "crates/hf", package = "hf" }
+openmushi-hooks = { path = "crates/hooks", package = "hooks" }
+openmushi-host = { path = "crates/host", package = "host" }
+openmushi-http = { path = "crates/http", package = "openmushi-http-utils" }
+openmushi-importer-core = { path = "crates/importer-core", package = "importer-core" }
+openmushi-intercept = { path = "crates/intercept", package = "intercept" }
+openmushi-jina = { path = "crates/jina", package = "jina" }
+openmushi-language = { path = "crates/language", package = "language" }
+openmushi-listener-core = { path = "crates/listener-core", package = "listener-core" }
+openmushi-llm-cactus = { path = "crates/llm-cactus", package = "llm-cactus" }
+openmushi-llm-proxy = { path = "crates/llm-proxy", package = "llm-proxy" }
+openmushi-llm-types = { path = "crates/llm-types", package = "llm-types" }
+openmushi-lmstudio = { path = "crates/lmstudio", package = "lmstudio" }
+openmushi-local-llm-core = { path = "crates/local-llm-core", package = "local-llm-core" }
+openmushi-mac = { path = "crates/mac", package = "mac" }
+openmushi-mcp = { path = "crates/mcp", package = "mcp" }
+openmushi-model-downloader = { path = "crates/model-downloader", package = "model-downloader" }
+openmushi-mp3 = { path = "crates/mp3", package = "mp3" }
+openmushi-notification = { path = "crates/notification", package = "notification" }
+openmushi-notification-interface = { path = "crates/notification-interface", package = "notification-interface" }
+openmushi-notion = { path = "crates/notion", package = "notion" }
+openmushi-onnx = { path = "crates/onnx", package = "onnx" }
+openmushi-openrouter = { path = "crates/openrouter", package = "openrouter" }
+openmushi-outlook-calendar = { path = "crates/outlook-calendar", package = "outlook-calendar" }
+openmushi-pyannote-local = { path = "crates/pyannote-local", package = "pyannote-local" }
+openmushi-storage = { path = "crates/storage", package = "storage" }
+openmushi-tantivy-core = { path = "crates/tantivy", package = "tantivy-core" }
+openmushi-tcc = { path = "crates/tcc", package = "tcc" }
+openmushi-template-app = { path = "crates/template-app", package = "template-app" }
+openmushi-template-app-legacy = { path = "crates/template-app-legacy", package = "template-app-legacy" }
+openmushi-tiptap = { path = "crates/tiptap", package = "tiptap" }
+openmushi-transcript = { path = "crates/transcript", package = "transcript" }
+openmushi-vad = { path = "crates/vad", package = "vad" }
+openmushi-vad-chunking = { path = "crates/vad-chunking", package = "vad-chunking" }
+openmushi-vad-masking = { path = "crates/vad-masking", package = "vad-masking" }
+openmushi-version = { path = "crates/version", package = "version" }
+openmushi-analytics = { path = "crates/analytics", package = "analytics" }
+openmushi-api-client = { path = "crates/api-client", package = "api-client" }
+openmushi-api-env = { path = "crates/api-env", package = "api-env" }
+openmushi-cactus = { path = "crates/cactus", package = "cactus" }
+openmushi-cactus-model = { path = "crates/cactus-model", package = "cactus-model" }
+openmushi-transcribe-cactus = { path = "crates/transcribe-cactus", package = "transcribe-cactus" }
+openmushi-whisper = { path = "crates/whisper", package = "whisper" }
+openmushi-whisper-local-model = { path = "crates/whisper-local-model", package = "whisper-local-model" }
+openmushi-template-support = { path = "crates/template-support", package = "template-support" }
+openmushi-ws-client = { path = "crates/ws-client", package = "ws-client" }
+openmushi-ws-utils = { path = "crates/ws-utils", package = "ws-utils" }
+owhisper-client = { path = "crates/owhisper-client", package = "owhisper-client" }
+openmushi-stt-sherpa = { path = "crates/stt-sherpa", package = "stt-sherpa" }
+owhisper-interface = { path = "crates/owhisper-interface", package = "owhisper-interface" }
+
+tauri = "2.10"
+tauri-build = "2.5"
+tauri-plugin = "2.5"
+tauri-plugin-autostart = "2.5"
+tauri-plugin-clipboard-manager = "2.3"
+tauri-plugin-deep-link = "2.4"
+tauri-plugin-dialog = "2.6"
+tauri-plugin-http = { version = "2.5", features = ["unsafe-headers"] }
+tauri-plugin-opener = "2.5"
+tauri-plugin-os = "2.3"
+tauri-plugin-prevent-default = "4"
+tauri-plugin-process = "2.3"
+tauri-plugin-shell = "2.3"
+tauri-plugin-single-instance = "2.4"
+tauri-plugin-store = "2.4"
+tauri-plugin-updater = "2.10"
+tauri-plugin-window-state = "2.4"
+
+tauri-plugin-analytics = { path = "plugins/analytics" }
+tauri-plugin-apple-calendar = { path = "plugins/apple-calendar" }
+tauri-plugin-auth = { path = "plugins/auth" }
+tauri-plugin-apple-contact = { path = "plugins/apple-contact" }
+tauri-plugin-audio-priority = { path = "plugins/audio-priority" }
+tauri-plugin-db2 = { path = "plugins/db2" }
+tauri-plugin-deeplink2 = { path = "plugins/deeplink2" }
+tauri-plugin-detect = { path = "plugins/detect" }
+tauri-plugin-dock = { path = "plugins/dock" }
+tauri-plugin-flag = { path = "plugins/flag" }
+tauri-plugin-fs-db = { path = "plugins/fs-db" }
+tauri-plugin-fs-sync = { path = "plugins/fs-sync" }
+tauri-plugin-fs2 = { path = "plugins/fs2" }
+tauri-plugin-git = { path = "plugins/git" }
+tauri-plugin-google-calendar = { path = "plugins/google-calendar" }
+tauri-plugin-hooks = { path = "plugins/hooks" }
+tauri-plugin-icon = { path = "plugins/icon" }
+tauri-plugin-importer = { path = "plugins/importer" }
+tauri-plugin-js = { path = "plugins/js" }
+tauri-plugin-listener = { path = "plugins/listener" }
+tauri-plugin-local-llm = { path = "plugins/local-llm" }
+tauri-plugin-local-stt = { path = "plugins/local-stt" }
+tauri-plugin-mcp = { path = "plugins/mcp" }
+tauri-plugin-misc = { path = "plugins/misc" }
+tauri-plugin-network = { path = "plugins/network" }
+tauri-plugin-notification = { path = "plugins/notification" }
+tauri-plugin-notify = { path = "plugins/notify" }
+tauri-plugin-opener2 = { path = "plugins/opener2" }
+tauri-plugin-overlay = { path = "plugins/overlay" }
+tauri-plugin-path2 = { path = "plugins/path2" }
+tauri-plugin-pdf = { path = "plugins/pdf" }
+tauri-plugin-permissions = { path = "plugins/permissions" }
+tauri-plugin-screen = { path = "plugins/screen" }
+tauri-plugin-settings = { path = "plugins/settings" }
+tauri-plugin-sfx = { path = "plugins/sfx" }
+tauri-plugin-sidecar2 = { path = "plugins/sidecar2" }
+tauri-plugin-store2 = { path = "plugins/store2" }
+tauri-plugin-tantivy = { path = "plugins/tantivy" }
+tauri-plugin-template = { path = "plugins/template" }
+tauri-plugin-tracing = { path = "plugins/tracing" }
+tauri-plugin-tray = { path = "plugins/tray" }
+tauri-plugin-updater2 = { path = "plugins/updater2" }
+tauri-plugin-windows = { path = "plugins/windows" }
+
+async-stream = "0.3.6"
+futures-channel = "0.3.31"
+futures-core = "0.3.31"
+futures-util = "0.3.31"
+openmushi-supervisor = { path = "crates/supervisor", package = "supervisor" }
+pico-args = "0.5"
+pin-project = "1"
+ractor = "0.15.10"
+rayon = "1.11"
+reqwest = "0.13"
+reqwest-middleware = "0.5"
+reqwest-retry = "0.9"
+reqwest-streams = "0.15"
+reqwest-tracing = "0.6"
+tokio = "1"
+tokio-stream = "0.1.17"
+tokio-tungstenite = "0.28"
+tokio-util = "0.7.15"
+
+camino = "1"
+
+anyhow = "1"
+apalis = "0.6"
+apalis-cron = "0.6"
+approx = "0.5.1"
+backon = "1.6.0"
+base64 = "0.22.1"
+bytes = "1.11"
+cached = "0.55.1"
+clap = "4"
+clap_mangen = "0.2"
+codes-iso-639 = "0.1.5"
+dirs = "6.0.0"
+dotenvy = "0.15.7"
+envy = "0.4"
+governor = "0.10.4"
+include_url_macro = "0.1.0"
+indoc = "2"
+isolang = "2.4"
+itertools = "0.14.0"
+jsonschema = "0.41"
+lazy_static = "1.5.0"
+moka = { version = "0.12", features = ["future"] }
+open = "5"
+regex = "1.12"
+schemars = "1"
+serde = "1"
+serde_bytes = "0.11.15"
+serde_html_form = "0.4"
+serde_json = "1"
+serde_qs = "1"
+serde_yaml = "0.9"
+shellexpand = "3"
+similar = "2.7.0"
+statig = "0.4"
+strum = "0.27"
+tempfile = "3"
+thiserror = "2"
+url = "2"
+urlencoding = "2.1"
+uuid = "1"
+
+criterion = "0.8"
+insta = "1.46"
+quickcheck = "1"
+quickcheck_macros = "1"
+serial_test = "3"
+testcontainers-modules = "0.12.1"
+wiremock = "0.6"
+
+axum = "0.8"
+axum-extra = "0.12"
+tower = "0.5"
+tower-http = "0.6"
+utoipa = { version = "5", features = ["axum_extras"] }
+
+chrono = "0.4"
+chrono-tz = "0.10"
+
+async-openai = { git = "https://github.com/fastrepl/async-openai", rev = "6404d307f3f706e818ad91544dc82fac5c545aee", default-features = false }
+gbnf-validator = { git = "https://github.com/fastrepl/gbnf-validator", rev = "3dec055" }
+
+vergen-gix = "1"
+
+askama = "0.15"
+askama_parser = "0.15"
+markdown = "1"
+mdast_util_to_markdown = "0.0.2"
+minijinja = "2.7.0"
+minijinja-contrib = "2.7.0"
+
+env_logger = "0.11.8"
+log = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tracing-test = "0.2"
+
+specta = "2.0.0-rc.22"
+specta-typescript = "0.0.9"
+tauri-specta = "2.0.0-rc.21"
+
+cidre = "0.14"
+cpal = "0.17"
+crossterm = { version = "0.29", features = ["event-stream"] }
+dasp = { version = "0.11.0", features = ["interpolate", "interpolate-linear"] }
+earshot = "0.1.0"
+hound = "3.5.1"
+htmd = "0.5.0"
+macos-accessibility-client = "0.0.1"
+mp3lame-encoder = "0.2.2"
+ratatui = "0.30"
+realfft = "3.5.0"
+ringbuf = "0.4.8"
+rodio = "0.21"
+vorbis_rs = "0.5.5"
+
+sherpa-rs = { version = "0.6", default-features = false, features = ["download-binaries"] }
+
+deepgram = { version = "0.7", default-features = false }
+hf-hub = { git = "https://github.com/huggingface/hf-hub", rev = "5510260", default-features = false, features = ["tokio"] }
+libsql = "0.9.24"
+
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = "0.3.2"
+objc2-application-services = "0.3.2"
+objc2-av-foundation = "0.3.2"
+objc2-contacts = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-event-kit = "0.3.2"
+objc2-foundation = "0.3.2"
+objc2-user-notifications = "0.3.2"
+
+hmac = "0.12"
+sha2 = "0.10"
+
+tokenizers = "0.21.4"
+whichlang = "0.1"
+
+swift-rs = { git = "https://github.com/yujonglee/swift-rs", rev = "41a1605" }
+
+rmcp = "0.14"
+rustls = { version = "0.23", default-features = false }
+sqlx = { version = "0.8", default-features = false }
+sysinfo = "0.38"

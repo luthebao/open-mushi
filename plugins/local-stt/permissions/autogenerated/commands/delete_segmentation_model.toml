@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-delete-segmentation-model"
+description = "Enables the delete_segmentation_model command without any pre-configured scope."
+commands.allow = ["delete_segmentation_model"]
+
+[[permission]]
+identifier = "deny-delete-segmentation-model"
+description = "Denies the delete_segmentation_model command without any pre-configured scope."
+commands.deny = ["delete_segmentation_model"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-list-speaker-models"
+description = "Enables the list_speaker_models command without any pre-configured scope."
+commands.allow = ["list_speaker_models"]
+
+[[permission]]
+identifier = "deny-list-speaker-models"
+description = "Denies the list_speaker_models command without any pre-configured scope."
+commands.deny = ["list_speaker_models"]

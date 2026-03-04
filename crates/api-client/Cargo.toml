@@ -1,0 +1,12 @@
+[package]
+name = "api-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+openmushi-google-calendar = { workspace = true }
+
+chrono = { workspace = true, features = ["serde"] }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
