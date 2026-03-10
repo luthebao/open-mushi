@@ -10,6 +10,8 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  ChevronDownIcon,
+  ChevronRightIcon,
   FolderIcon,
   FolderOpenIcon,
   PlusIcon,
@@ -240,8 +242,8 @@ function InlineNameInput({
       className="flex w-full items-center gap-1.5 rounded-md bg-neutral-100 py-[3px] pr-2"
       style={{ paddingLeft: `${depth * 16 + 12}px` }}
     >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[8px] text-transparent">
-        ▸
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-transparent">
+        <ChevronRightIcon className="h-3.5 w-3.5" />
       </span>
       {icon}
       <input
@@ -408,13 +410,18 @@ function WorkspaceNode({
         <span
           onClick={hasChildren ? handleToggle : undefined}
           className={cn([
-            "flex h-4 w-4 shrink-0 items-center justify-center text-[8px]",
+            "flex h-4 w-4 shrink-0 items-center justify-center",
             hasChildren
               ? "cursor-pointer text-neutral-400 hover:text-neutral-600"
               : "text-transparent",
           ])}
         >
-          {hasChildren && (isExpanded ? "▾" : "▸")}
+          {hasChildren &&
+            (isExpanded ? (
+              <ChevronDownIcon className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRightIcon className="h-3.5 w-3.5" />
+            ))}
         </span>
         {isExpanded ? (
           <FolderOpenIcon className="h-4 w-4 shrink-0 text-neutral-400" />

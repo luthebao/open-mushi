@@ -20,9 +20,11 @@ import { StandardTabWrapper } from "~/shared/main";
 import { type TabItem, TabItemBase } from "~/shared/tabs";
 import { type Tab } from "~/store/zustand/tabs";
 
+import { Graph3DCanvas } from "./Graph3DCanvas";
 import { GraphCanvas } from "./GraphCanvas";
 import { NodeDetailPanel } from "./NodeDetailPanel";
 import { ScopeSelector } from "./ScopeSelector";
+import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 import type { GraphScope } from "./types";
 import { useForceLayout } from "./useForceLayout";
 import { useGraphData } from "./useGraphData";
@@ -60,6 +62,7 @@ export function TabContentGraph({
   tab: Extract<Tab, { type: "graph" }>;
 }) {
   const [scope, setScope] = useState<GraphScope>(tab.scope);
+  const [viewMode, setViewMode] = useState<ViewMode>("2d");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const { data, loading, error, progress, modelReady, generate } = useGraphData(scope);
@@ -81,6 +84,7 @@ export function TabContentGraph({
       <div className="flex items-center justify-between border-b border-neutral-200">
         <ScopeSelector scope={scope} onScopeChange={setScope} />
         <div className="flex items-center gap-2 px-4 py-2">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           {data.nodes.length > 0 && (
             <span className="text-xs text-neutral-400">
               {data.nodes.length} keywords, {data.edges.length} connections
@@ -114,14 +118,22 @@ export function TabContentGraph({
         ) : (
           <ResizablePanelGroup direction="horizontal">
             <ResizablePanel defaultSize={selectedNode ? 70 : 100} minSize={40}>
-              <ReactFlowProvider>
-                <GraphCanvas
-                  flowNodes={flowNodes}
-                  flowEdges={flowEdges}
+              {viewMode === "2d" ? (
+                <ReactFlowProvider>
+                  <GraphCanvas
+                    flowNodes={flowNodes}
+                    flowEdges={flowEdges}
+                    onNodeClick={handleNodeClick}
+                    selectedNodeId={selectedNodeId}
+                  />
+                </ReactFlowProvider>
+              ) : (
+                <Graph3DCanvas
+                  data={data}
                   onNodeClick={handleNodeClick}
                   selectedNodeId={selectedNodeId}
                 />
-              </ReactFlowProvider>
+              )}
             </ResizablePanel>
             {selectedNode && (
               <>

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from "react";
 import { commands as analyticsCommands } from "@openmushi/plugin-analytics";
 import { commands as sfxCommands } from "@openmushi/plugin-sfx";
 
-import { LoginSection } from "./account";
 import { CalendarSection } from "./calendar";
 import {
   getInitialStep,
@@ -75,12 +74,6 @@ export function TabContentOnboarding({
     micPermissionStatus.data === "authorized" &&
     systemAudioPermissionStatus.data === "authorized";
 
-  useEffect(() => {
-    if (currentStep === "permissions" && allPermissionsGranted) {
-      setCurrentStep("login");
-    }
-  }, [currentStep, allPermissionsGranted]);
-
   const goNext = useCallback(() => {
     const next = getNextStep(currentStep);
     if (next) setCurrentStep(next);
@@ -90,6 +83,12 @@ export function TabContentOnboarding({
     const prev = getPrevStep(currentStep);
     if (prev) setCurrentStep(prev);
   }, [currentStep]);
+
+  useEffect(() => {
+    if (currentStep === "permissions" && allPermissionsGranted) {
+      goNext();
+    }
+  }, [currentStep, allPermissionsGranted, goNext]);
 
   useEffect(() => {
     void analyticsCommands.event({
@@ -151,17 +150,6 @@ export function TabContentOnboarding({
               onNext={goNext}
             >
               <PermissionsSection />
-            </OnboardingSection>
-
-            <OnboardingSection
-              title="Account"
-              description="Sign in to unlock Pro features"
-              completedTitle="Signed up"
-              status={getStepStatus("login", currentStep)}
-              onBack={goBack}
-              onNext={goNext}
-            >
-              <LoginSection onContinue={goNext} />
             </OnboardingSection>
 
             <OnboardingSection

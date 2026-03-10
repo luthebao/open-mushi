@@ -4,19 +4,19 @@ import { useMemo, useRef } from "react";
 import type { GraphData, GraphEdge } from "./types";
 import { MAX_CONNECTIONS_PER_NODE, MAX_EDGES } from "./types";
 
-function nodeSize(frequency: number, maxFrequency: number): number {
+export function nodeSize(frequency: number, maxFrequency: number): number {
   if (maxFrequency <= 1) return 60;
   const t = Math.min(frequency / maxFrequency, 1);
   return 40 + t * 60;
 }
 
-function edgeStroke(weight: number, maxWeight: number): number {
+export function edgeStroke(weight: number, maxWeight: number): number {
   if (maxWeight <= 1) return 1;
   const t = Math.min(weight / maxWeight, 1);
   return 1 + t * 3;
 }
 
-function filterEdges(edges: GraphEdge[]): GraphEdge[] {
+export function filterEdges(edges: GraphEdge[]): GraphEdge[] {
   let filtered = edges;
 
   // Drop weight-1 edges when there are many, but only if higher-weight edges exist

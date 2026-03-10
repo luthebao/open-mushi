@@ -2,8 +2,6 @@ import {
   Check,
   ChevronDown,
   CirclePlus,
-  Eye,
-  EyeOff,
   RefreshCcw,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -72,6 +70,11 @@ const getDisplayName = (providerId: string, model: string): string => {
   return model;
 };
 
+type DisplayModel = {
+  id: string;
+  reasons: ModelIgnoreReason[];
+};
+
 export function ModelCombobox({
   providerId,
   value,
@@ -93,7 +96,6 @@ export function ModelCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [showIgnored, setShowIgnored] = useState(false);
 
   const {
     data: fetchedResult,
@@ -102,25 +104,26 @@ export function ModelCombobox({
     isFetching,
   } = useModelMetadata(providerId, listModels, { enabled: !disabled });
 
-  const options: string[] = useMemo(
-    () => fetchedResult?.models ?? [],
-    [fetchedResult],
-  );
-  const ignoredOptions = useMemo(
-    () => fetchedResult?.ignored ?? [],
-    [fetchedResult],
-  );
+  const allModels: DisplayModel[] = useMemo(() => {
+    if (!fetchedResult) return [];
+    const recommended = (fetchedResult.models ?? []).map((id) => ({
+      id,
+      reasons: [] as ModelIgnoreReason[],
+    }));
+    const other = fetchedResult.ignored ?? [];
+    return [...recommended, ...other];
+  }, [fetchedResult]);
+
   const trimmedQuery = query.trim();
   const hasExactMatch = useMemo(
     () =>
-      options.some(
-        (option) =>
-          option.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase(),
+      allModels.some(
+        (m) =>
+          m.id.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase(),
       ),
-    [options, trimmedQuery],
+    [allModels, trimmedQuery],
   );
   const canSelectFreeform = trimmedQuery.length > 0 && !hasExactMatch;
-  const hasIgnoredOptions = ignoredOptions.length > 0;
 
   const handleSelect = useCallback(
     (option: string) => {
@@ -129,11 +132,6 @@ export function ModelCombobox({
       setQuery("");
     },
     [onChange],
-  );
-
-  const toggleShowIgnored = useCallback(
-    () => setShowIgnored((prev) => !prev),
-    [],
   );
 
   return (
@@ -188,8 +186,6 @@ export function ModelCombobox({
             <div className="text-muted-foreground px-2 py-1.5 text-sm">
               {trimmedQuery.length > 0 ? (
                 <p>No results found.</p>
-              ) : hasIgnoredOptions ? (
-                <p>No models ready to use.</p>
               ) : (
                 <p>No models available.</p>
               )}
@@ -198,67 +194,53 @@ export function ModelCombobox({
 
           <CommandList>
             <CommandGroup className="overflow-y-auto">
-              {options.map((option) => (
-                <CommandItem
-                  key={option}
-                  tabIndex={0}
-                  value={option}
-                  onSelect={() => {
-                    handleSelect(option);
-                  }}
-                  onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
-                    if (event.key === "Enter") {
-                      event.stopPropagation();
-                      handleSelect(option);
-                    }
-                  }}
-                  className={cn([
-                    "cursor-pointer",
-                    "hover:bg-neutral-200! focus:bg-neutral-200! aria-selected:bg-transparent",
-                  ])}
-                >
-                  <span className="truncate">
-                    {getDisplayName(providerId, option)}
-                  </span>
-                </CommandItem>
-              ))}
-
-              {showIgnored &&
-                ignoredOptions.map((option) => (
+              {allModels.map((model) => {
+                const hasReasons = model.reasons.length > 0;
+                const item = (
                   <CommandItem
-                    key={`ignored-${option.id}`}
+                    key={model.id}
                     tabIndex={0}
-                    value={option.id}
+                    value={model.id}
                     onSelect={() => {
-                      handleSelect(option.id);
+                      handleSelect(model.id);
                     }}
-                    onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                    onKeyDown={(
+                      event: React.KeyboardEvent<HTMLDivElement>,
+                    ) => {
                       if (event.key === "Enter") {
                         event.stopPropagation();
-                        handleSelect(option.id);
+                        handleSelect(model.id);
                       }
                     }}
                     className={cn([
-                      "cursor-pointer opacity-50",
+                      "cursor-pointer",
+                      hasReasons && "opacity-50",
                       "hover:bg-neutral-200! focus:bg-neutral-200! aria-selected:bg-transparent",
                     ])}
                   >
-                    <Tooltip delayDuration={10}>
-                      <TooltipTrigger asChild>
-                        <span className="w-full truncate">{option.id}</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs">
-                        <div className="flex flex-col gap-0.5">
-                          {option.reasons.map((reason) => (
-                            <div key={reason}>
-                              • {formatIgnoreReason(reason)}
-                            </div>
-                          ))}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
+                    <span className="truncate">
+                      {getDisplayName(providerId, model.id)}
+                    </span>
                   </CommandItem>
-                ))}
+                );
+
+                if (!hasReasons) return item;
+
+                return (
+                  <Tooltip key={model.id} delayDuration={10}>
+                    <TooltipTrigger asChild>{item}</TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        {model.reasons.map((reason) => (
+                          <div key={reason}>
+                            {formatIgnoreReason(reason)}
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
 
               {canSelectFreeform && (
                 <CommandItem
@@ -268,7 +250,9 @@ export function ModelCombobox({
                   onSelect={() => {
                     handleSelect(trimmedQuery);
                   }}
-                  onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                  onKeyDown={(
+                    event: React.KeyboardEvent<HTMLDivElement>,
+                  ) => {
                     if (event.key === "Enter") {
                       event.stopPropagation();
                       handleSelect(trimmedQuery);
@@ -286,24 +270,10 @@ export function ModelCombobox({
             </CommandGroup>
           </CommandList>
 
-          <div className="text-muted-foreground flex items-center justify-between border-t px-2 py-1.5 text-xs">
-            <button
-              type="button"
-              onClick={toggleShowIgnored}
-              className="hover:text-foreground mr-1 flex items-center gap-1 text-xs transition-colors"
-            >
-              {showIgnored ? (
-                <EyeOff className="h-3 w-3" />
-              ) : (
-                <Eye className="h-3 w-3" />
-              )}
-            </button>
-
-            {hasIgnoredOptions && (
-              <span>
-                {showIgnored
-                  ? `Showing total of ${options.length} models.`
-                  : `${ignoredOptions.length} items ignored.`}
+          <div className="text-muted-foreground flex items-center justify-end border-t px-2 py-1.5 text-xs">
+            {allModels.length > 0 && (
+              <span className="mr-auto">
+                {allModels.length} model{allModels.length !== 1 ? "s" : ""}
               </span>
             )}
 
@@ -311,7 +281,7 @@ export function ModelCombobox({
               type="button"
               onClick={() => refetch()}
               disabled={isFetching}
-              className="hover:text-foreground ml-auto flex items-center gap-1 text-xs transition-colors disabled:opacity-50"
+              className="hover:text-foreground flex items-center gap-1 text-xs transition-colors disabled:opacity-50"
             >
               <RefreshCcw
                 className={cn(["h-3 w-3", isFetching && "animate-spin"])}
