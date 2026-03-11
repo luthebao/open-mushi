@@ -333,6 +333,10 @@ async fn start_session_impl(
             None,
             Some(params.session_id.clone()),
         );
+        if state.recording_state != RecordingState::Starting {
+            tracing::warn!("start_transition_to_starting_rejected");
+            return false;
+        }
 
         configure_sentry_session_context(&params);
 
@@ -371,13 +375,21 @@ async fn start_session_impl(
                 supervisor_cell.link(root_cell);
 
                 state.session_id = Some(params.session_id.clone());
-                state.supervisor = Some(supervisor_cell);
+                state.supervisor = Some(supervisor_cell.clone());
                 set_recording_state(
                     state,
                     RecordingState::Recording,
                     None,
                     Some(params.session_id.clone()),
                 );
+                if state.recording_state != RecordingState::Recording {
+                    tracing::warn!("start_transition_to_recording_rejected");
+                    state.session_id = None;
+                    state.supervisor = None;
+                    supervisor_cell.stop(Some("recording_transition_rejected".to_string()));
+                    clear_sentry_session_context();
+                    return false;
+                }
 
                 state.runtime.emit_lifecycle(SessionLifecycleEvent::Active {
                     session_id: params.session_id,
@@ -477,7 +489,10 @@ fn drain_processing_queue(myself: &ActorRef<RootMsg>, state: &mut RootState) {
     }
 
     let Some(job) = state.processing_queue.pop_front() else {
-        if matches!(state.recording_state, RecordingState::QueuedForStt) {
+        if matches!(
+            state.recording_state,
+            RecordingState::QueuedForStt | RecordingState::Completed | RecordingState::Failed
+        ) {
             set_recording_state(state, RecordingState::Idle, None, None);
         }
         return;
@@ -563,10 +578,44 @@ fn is_start_blocked(state: &RootState) -> bool {
 }
 
 fn clear_stale_recording_state(state: &mut RootState) {
+    let post_processing_active = state.current_job.is_some()
+        || matches!(
+            state.recording_state,
+            RecordingState::Transcribing | RecordingState::QueuedForLlm | RecordingState::Summarizing
+        )
+        || (matches!(state.recording_state, RecordingState::QueuedForStt)
+            && !state.processing_queue.is_empty());
+
+    let lifecycle_active = state.supervisor.is_some()
+        || state.finalizing
+        || matches!(
+            state.recording_state,
+            RecordingState::Starting | RecordingState::Recording | RecordingState::Stopping
+        )
+        || post_processing_active;
+
+    if lifecycle_active {
+        emit_recording_diagnostic(
+            state,
+            state.session_id.clone(),
+            "clear_stale_recording_state",
+            None,
+            "ignored stale-clear while recording lifecycle is active".to_string(),
+            None,
+        );
+        emit_recording_status(state, state.session_id.clone(), None);
+        return;
+    }
+
     state.processing_queue.clear();
     state.current_job = None;
     state.last_error = None;
-    set_recording_state(state, RecordingState::Idle, None, state.session_id.clone());
+    state.finalizing = false;
+    if state.supervisor.is_none() {
+        state.session_id = None;
+    }
+    state.recording_state = RecordingState::Idle;
+    emit_recording_status(state, state.session_id.clone(), None);
 }
 
 fn is_allowed_transition(current: &RecordingState, next: &RecordingState) -> bool {
@@ -574,6 +623,12 @@ fn is_allowed_transition(current: &RecordingState, next: &RecordingState) -> boo
 
     match (current, next) {
         (Idle, Starting)
+        | (QueuedForStt, Starting)
+        | (Transcribing, Starting)
+        | (QueuedForLlm, Starting)
+        | (Summarizing, Starting)
+        | (Completed, Starting)
+        | (Failed, Starting)
         | (Starting, Recording)
         | (Starting, Failed)
         | (Recording, Stopping)
@@ -782,20 +837,19 @@ mod tests {
     async fn duplicate_start_is_blocked_while_supervisor_exists() {
         let runtime = Arc::new(TestRuntime::new());
         let mut state = mk_root_state(runtime);
-        let (session_ref, _handle) = spawn_session_supervisor(SessionContext {
-            runtime: state.runtime.clone(),
-            params: mk_params("existing-session"),
-            app_dir: std::env::temp_dir(),
-            started_at_instant: Instant::now(),
-            started_at_system: SystemTime::now(),
-            sherpa_config: None,
-        })
+        let (dummy_ref, _handle) = Actor::spawn(
+            None,
+            RootActor,
+            RootArgs {
+                runtime: state.runtime.clone(),
+            },
+        )
         .await
-        .expect("spawn session supervisor");
+        .expect("spawn dummy actor");
 
-        state.supervisor = Some(session_ref.get_cell());
+        state.supervisor = Some(dummy_ref.get_cell());
         assert!(is_start_blocked(&state));
-        session_ref.stop(None);
+        dummy_ref.stop(None);
     }
 
     #[test]
@@ -803,12 +857,8 @@ mod tests {
         let runtime = Arc::new(TestRuntime::new());
         let mut state = mk_root_state(runtime.clone());
         state.session_id = Some("s1".to_string());
-        state.recording_state = RecordingState::Failed;
+        state.recording_state = RecordingState::Completed;
         state.processing_queue.push_back(ProcessingJob {
-            session_id: "s1".to_string(),
-            enqueued_at: Instant::now(),
-        });
-        state.current_job = Some(ProcessingJob {
             session_id: "s1".to_string(),
             enqueued_at: Instant::now(),
         });
@@ -821,17 +871,21 @@ mod tests {
         assert_eq!(state.processing_queue.len(), 0);
         assert!(state.current_job.is_none());
         assert!(state.last_error.is_none());
+        assert!(!state.finalizing);
+        assert!(state.session_id.is_none());
 
         let events = runtime.take_recording_events();
         assert_eq!(events.len(), 2);
         for event in events {
             match event {
                 SessionRecordingEvent::RecordingStateChanged {
+                    session_id,
                     state,
                     queue_depth,
                     current_job_session_id,
                     ..
                 } => {
+                    assert!(session_id.is_none());
                     assert_eq!(state, RecordingState::Idle);
                     assert_eq!(queue_depth, 0);
                     assert!(current_job_session_id.is_none());
@@ -841,6 +895,126 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn clear_stale_recording_state_is_noop_when_post_processing_inflight() {
+        let runtime = Arc::new(TestRuntime::new());
+
+        let mut transcribing = mk_root_state(runtime.clone());
+        transcribing.session_id = Some("post-s1".to_string());
+        transcribing.recording_state = RecordingState::Transcribing;
+        transcribing.current_job = Some(ProcessingJob {
+            session_id: "post-s1".to_string(),
+            enqueued_at: Instant::now(),
+        });
+        transcribing.last_error = Some("keep-post-processing".to_string());
+
+        clear_stale_recording_state(&mut transcribing);
+
+        assert_eq!(transcribing.recording_state, RecordingState::Transcribing);
+        assert!(transcribing.current_job.is_some());
+        assert_eq!(
+            transcribing.current_job.as_ref().map(|job| job.session_id.as_str()),
+            Some("post-s1")
+        );
+        assert_eq!(
+            transcribing.last_error.as_deref(),
+            Some("keep-post-processing")
+        );
+
+        let mut queued = mk_root_state(runtime.clone());
+        queued.session_id = Some("queued-s1".to_string());
+        queued.recording_state = RecordingState::QueuedForStt;
+        queued.processing_queue.push_back(ProcessingJob {
+            session_id: "queued-s1".to_string(),
+            enqueued_at: Instant::now(),
+        });
+
+        clear_stale_recording_state(&mut queued);
+
+        assert_eq!(queued.recording_state, RecordingState::QueuedForStt);
+        assert_eq!(queued.processing_queue.len(), 1);
+
+        let events = runtime.take_recording_events();
+        assert_eq!(events.len(), 4);
+        assert!(matches!(
+            &events[0],
+            SessionRecordingEvent::RecordingDiagnostic { stage, .. } if stage == "clear_stale_recording_state"
+        ));
+        assert!(matches!(
+            &events[1],
+            SessionRecordingEvent::RecordingStateChanged {
+                state: RecordingState::Transcribing,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &events[2],
+            SessionRecordingEvent::RecordingDiagnostic { stage, .. } if stage == "clear_stale_recording_state"
+        ));
+        assert!(matches!(
+            &events[3],
+            SessionRecordingEvent::RecordingStateChanged {
+                state: RecordingState::QueuedForStt,
+                queue_depth: 1,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn clear_stale_recording_state_is_noop_when_lifecycle_active() {
+        let runtime = Arc::new(TestRuntime::new());
+        let mut state = mk_root_state(runtime.clone());
+        state.session_id = Some("active-s1".to_string());
+        state.recording_state = RecordingState::Recording;
+        state.finalizing = true;
+        state.processing_queue.push_back(ProcessingJob {
+            session_id: "queued-s1".to_string(),
+            enqueued_at: Instant::now(),
+        });
+        state.current_job = Some(ProcessingJob {
+            session_id: "active-s1".to_string(),
+            enqueued_at: Instant::now(),
+        });
+        state.last_error = Some("keep-me".to_string());
+
+        let (dummy_ref, _handle) = Actor::spawn(
+            None,
+            RootActor,
+            RootArgs {
+                runtime: state.runtime.clone(),
+            },
+        )
+        .await
+        .expect("spawn dummy actor");
+        state.supervisor = Some(dummy_ref.get_cell());
+
+        clear_stale_recording_state(&mut state);
+
+        assert_eq!(state.recording_state, RecordingState::Recording);
+        assert_eq!(state.processing_queue.len(), 1);
+        assert!(state.current_job.is_some());
+        assert_eq!(state.last_error.as_deref(), Some("keep-me"));
+        assert!(state.finalizing);
+        assert_eq!(state.session_id.as_deref(), Some("active-s1"));
+
+        let events = runtime.take_recording_events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            SessionRecordingEvent::RecordingDiagnostic { stage, .. } if stage == "clear_stale_recording_state"
+        ));
+        assert!(matches!(
+            &events[1],
+            SessionRecordingEvent::RecordingStateChanged {
+                state: RecordingState::Recording,
+                ..
+            }
+        ));
+
+        dummy_ref.stop(None);
     }
 
     #[test]
@@ -899,5 +1073,49 @@ mod tests {
         .await;
 
         assert!(!started);
+    }
+
+    #[test]
+    fn start_is_not_blocked_for_queue_or_post_processing_states_without_active_lifecycle() {
+        for state_value in [
+            RecordingState::QueuedForStt,
+            RecordingState::Transcribing,
+            RecordingState::QueuedForLlm,
+            RecordingState::Summarizing,
+            RecordingState::Completed,
+            RecordingState::Failed,
+        ] {
+            let mut state = mk_root_state(Arc::new(TestRuntime::new()));
+            state.recording_state = state_value.clone();
+            assert!(
+                !is_start_blocked(&state),
+                "start should be allowed while in {state_value:?} when lifecycle is inactive"
+            );
+            assert!(is_allowed_transition(&state_value, &RecordingState::Starting));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn drain_processing_queue_normalizes_terminal_state_to_idle_when_empty() {
+        let runtime = Arc::new(TestRuntime::new());
+
+        for terminal_state in [RecordingState::Completed, RecordingState::Failed] {
+            let mut state = mk_root_state(runtime.clone());
+            state.recording_state = terminal_state;
+
+            let (root_ref, _handle) = Actor::spawn(
+                None,
+                RootActor,
+                RootArgs {
+                    runtime: state.runtime.clone(),
+                },
+            )
+            .await
+            .expect("spawn root actor");
+
+            drain_processing_queue(&root_ref, &mut state);
+            assert_eq!(state.recording_state, RecordingState::Idle);
+            root_ref.stop(None);
+        }
     }
 }

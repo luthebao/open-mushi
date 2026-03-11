@@ -20,11 +20,52 @@ import { useShell } from "~/contexts/shell";
 import { SearchResults } from "~/search/components/sidebar";
 import { useSearch } from "~/search/contexts/ui";
 import { TrafficLights } from "~/shared/ui/traffic-lights";
+import { useListener } from "~/stt/contexts";
 import { commands } from "~/types/tauri.gen";
 
 const DevtoolView = lazy(() =>
   import("./devtool").then((m) => ({ default: m.DevtoolView })),
 );
+
+function RecordingQueueStatus() {
+  const { state, queueDepth, currentJobSessionId, diagnostics } = useListener(
+    (store) => ({
+      state: store.live.recording.state,
+      queueDepth: store.live.recording.queueDepth,
+      currentJobSessionId: store.live.recording.currentJobSessionId,
+      diagnostics: store.live.recording.diagnostics,
+    }),
+  );
+
+  const show =
+    state === "queuedForStt" ||
+    state === "transcribing" ||
+    state === "queuedForLlm" ||
+    state === "summarizing";
+
+  if (!show) {
+    return null;
+  }
+
+  const stageText =
+    state === "queuedForStt"
+      ? "Queued for transcription"
+      : state === "transcribing"
+        ? "Transcribing"
+        : state === "queuedForLlm"
+          ? "Queued for summary"
+          : "Summarizing";
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      <div className="font-medium">Recording pipeline</div>
+      <div className="mt-1">Stage: {stageText}</div>
+      <div>Queue depth: {queueDepth}</div>
+      <div>Current job: {currentJobSessionId ?? "none"}</div>
+      {diagnostics?.message && <div className="mt-1">{diagnostics.message}</div>}
+    </div>
+  );
+}
 
 export function LeftSidebar() {
   const { leftsidebar } = useShell();
@@ -81,6 +122,7 @@ export function LeftSidebar() {
       </header>
 
       <div className="flex flex-1 flex-col gap-1 overflow-hidden">
+        <RecordingQueueStatus />
         <div className="relative min-h-0 flex-1 overflow-hidden">
           {leftsidebar.showDevtool ? (
             <Suspense fallback={null}>

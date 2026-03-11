@@ -4,28 +4,29 @@ import { z } from "zod";
 import { sep } from "@tauri-apps/api/path";
 
 import { useLanguageModel } from "~/ai/hooks";
-import {
-  extractPlainText,
-  flattenTranscript,
-} from "~/search/contexts/engine/utils";
-import { collectEnhancedNotesContent } from "~/store/tinybase/store/utils";
 import * as main from "~/store/tinybase/store/main";
 import { commands as fs2Commands } from "@openmushi/plugin-fs2";
 import { commands as settingsCommands } from "@openmushi/plugin-settings";
 
 import {
-  MAX_EDGES,
-  MAX_GRAPH_NODES,
-  type GraphData,
-  type GraphEdge,
-  type GraphNode,
-  type GraphScope,
-} from "./types";
+  buildGraphFromLLMOutput,
+  buildPrompt,
+  collectSessionArtifact,
+  type SessionGraphArtifact,
+} from "./artifacts";
+import { MAX_GRAPH_NODES, type GraphData, type GraphScope } from "./types";
+import { useListener } from "~/stt/contexts";
 
 const EMPTY: GraphData = { nodes: [], edges: [] };
 
-const MAX_TEXT_PER_NOTE = 1000;
-const MAX_NOTES_PER_BATCH = 20;
+export function resolveScopedCacheData(cached: GraphData | null): GraphData {
+  if (!cached || cached.nodes.length === 0) {
+    return EMPTY;
+  }
+
+  return cached;
+}
+
 const LLM_TIMEOUT_MS = 120_000;
 const STRUCTURED_ATTEMPT_MS = 15_000;
 
@@ -73,58 +74,6 @@ async function loadGraphData(scope: GraphScope): Promise<GraphData | null> {
   }
 }
 
-function collectSessionText(
-  store: main.Store,
-  sessionId: string,
-  rawMd: unknown,
-): string {
-  const parts: string[] = [];
-
-  try {
-    const noteText = extractPlainText(rawMd);
-    if (noteText) parts.push(noteText);
-  } catch {
-    // skip malformed raw_md
-  }
-
-  try {
-    const enhancedText = extractPlainText(
-      collectEnhancedNotesContent(store, sessionId),
-    );
-    if (enhancedText) parts.push(enhancedText);
-  } catch {
-    // skip malformed enhanced notes
-  }
-
-  try {
-    const transcriptIds = store.getRowIds("transcripts").filter((id) => {
-      return store.getCell("transcripts", id, "session_id") === sessionId;
-    });
-    for (const tid of transcriptIds) {
-      const words = store.getCell("transcripts", tid, "words");
-      const text = flattenTranscript(words);
-      if (text) parts.push(text);
-    }
-  } catch {
-    // skip transcript errors
-  }
-
-  return parts.join(" ");
-}
-
-function buildPrompt(
-  sessionTexts: { id: string; text: string }[],
-): string {
-  const notes = sessionTexts
-    .slice(0, MAX_NOTES_PER_BATCH)
-    .map(
-      (s, i) =>
-        `[Note ${i}]:\n${s.text.slice(0, MAX_TEXT_PER_NOTE)}`,
-    )
-    .join("\n\n---\n\n");
-
-  return notes;
-}
 
 const SYSTEM_PROMPT = `You extract knowledge graph nodes from meeting notes. Output raw JSON only — no thinking, no explanation, no markdown fences.
 
@@ -228,81 +177,6 @@ async function extractWithLLM(
   );
 }
 
-function buildGraphFromLLMOutput(
-  output: z.infer<typeof graphExtractionSchema>,
-  sessionTexts: { id: string; text: string }[],
-): GraphData {
-  const capped = sessionTexts.slice(0, MAX_NOTES_PER_BATCH);
-  const nodeMap = new Map<string, { noteIds: Set<string> }>();
-
-  for (const kw of output.keywords.slice(0, MAX_GRAPH_NODES)) {
-    const keyword = kw.keyword.toLowerCase().trim();
-    if (!keyword) continue;
-
-    let noteIds: Set<string>;
-    if (capped.length === 1) {
-      // Single note: all keywords belong to it
-      noteIds = new Set([capped[0].id]);
-    } else {
-      noteIds = new Set(
-        kw.noteIndices
-          .filter((i) => i >= 0 && i < capped.length)
-          .map((i) => capped[i].id),
-      );
-      // If LLM returned no valid indices, assign to first note as fallback
-      if (noteIds.size === 0 && capped.length > 0) {
-        noteIds = new Set([capped[0].id]);
-      }
-    }
-
-    if (noteIds.size === 0) continue;
-
-    const existing = nodeMap.get(keyword);
-    if (existing) {
-      for (const id of noteIds) existing.noteIds.add(id);
-    } else {
-      nodeMap.set(keyword, { noteIds });
-    }
-  }
-
-  const nodes: GraphNode[] = Array.from(nodeMap.entries()).map(
-    ([keyword, data]) => ({
-      id: keyword,
-      label: keyword,
-      frequency: data.noteIds.size,
-      noteIds: Array.from(data.noteIds),
-    }),
-  );
-
-  const edgeMap = new Map<string, number>();
-  const nodeList = Array.from(nodeMap.entries());
-
-  for (let i = 0; i < nodeList.length; i++) {
-    for (let j = i + 1; j < nodeList.length; j++) {
-      const [a, dataA] = nodeList[i];
-      const [b, dataB] = nodeList[j];
-      let shared = 0;
-      for (const id of dataA.noteIds) {
-        if (dataB.noteIds.has(id)) shared++;
-      }
-      if (shared > 0) {
-        const key = a < b ? `${a}::${b}` : `${b}::${a}`;
-        edgeMap.set(key, shared);
-      }
-    }
-  }
-
-  const edges: GraphEdge[] = Array.from(edgeMap.entries())
-    .map(([key, weight]) => {
-      const [source, target] = key.split("::");
-      return { source, target, weight };
-    })
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, MAX_EDGES);
-
-  return { nodes, edges };
-}
-
 export type GraphDataState = {
   data: GraphData;
   loading: boolean;
@@ -312,11 +186,59 @@ export type GraphDataState = {
   generate: () => void;
 };
 
+type GenerateAbortCause = "superseded" | "timeout";
+
+function scopeIncludesSession(
+  scope: GraphScope,
+  sessionId: string,
+  workspaceSessionIds: string[],
+): boolean {
+  if (scope.scope === "all") {
+    return true;
+  }
+  if (scope.scope === "workspace") {
+    return workspaceSessionIds.includes(sessionId);
+  }
+  return scope.sessionId === sessionId;
+}
+
+export function resolveAbortMessage(cause: GenerateAbortCause | undefined): string | null {
+  if (cause === "timeout") {
+    return "Generation timed out. Try again or use a faster model.";
+  }
+  return null;
+}
+
+export function shouldAutoAttemptCompletedSession(params: {
+  completedSessionId: string | null;
+  attemptedSessionId: string | null;
+  inScope: boolean;
+  loading: boolean;
+  alreadyRepresented: boolean;
+}): boolean {
+  const {
+    completedSessionId,
+    attemptedSessionId,
+    inScope,
+    loading,
+    alreadyRepresented,
+  } = params;
+
+  if (!completedSessionId) return false;
+  if (!inScope) return false;
+  if (loading) return false;
+  if (alreadyRepresented) return false;
+  if (attemptedSessionId === completedSessionId) return false;
+
+  return true;
+}
+
 export function useGraphData(scope: GraphScope): GraphDataState {
   const sessionsTable = main.UI.useTable("sessions", main.STORE_ID);
   const allRowIds = main.UI.useRowIds("sessions", main.STORE_ID);
   const store = main.UI.useStore(main.STORE_ID);
   const model = useLanguageModel();
+  const recording = useListener((state) => state.live.recording);
 
   main.UI.useTable("transcripts", main.STORE_ID);
   main.UI.useTable("enhanced_notes", main.STORE_ID);
@@ -331,17 +253,30 @@ export function useGraphData(scope: GraphScope): GraphDataState {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
+  const [autoAttemptedCompletedSessionId, setAutoAttemptedCompletedSessionId] =
+    useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activeRunIdRef = useRef(0);
+  const loadVersionRef = useRef(0);
 
   // Auto-load cached graph data on mount / scope change
   const currentScopeKey = scopeKey(scope);
   useEffect(() => {
-    loadGraphData(scope).then((cached) => {
-      if (cached && cached.nodes.length > 0) {
-        setData(cached);
+    const loadVersion = ++loadVersionRef.current;
+    let cancelled = false;
+
+    void loadGraphData(scope).then((cached) => {
+      if (cancelled || loadVersion !== loadVersionRef.current) {
+        return;
       }
+
+      setData(resolveScopedCacheData(cached));
     });
-  }, [currentScopeKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentScopeKey, scope]);
 
   const generate = useCallback(async () => {
     if (!store) {
@@ -355,119 +290,175 @@ export function useGraphData(scope: GraphScope): GraphDataState {
       return;
     }
 
-    abortRef.current?.abort();
+    const previousController = abortRef.current;
+    if (previousController) {
+      previousController.abort();
+    }
+
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
+
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Set up timeout
-    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+    let abortCause: GenerateAbortCause | undefined;
+    const timeoutId = setTimeout(() => {
+      abortCause = "timeout";
+      controller.abort();
+    }, LLM_TIMEOUT_MS);
 
-    let sessionIds: string[];
-    switch (scope.scope) {
-      case "all":
-        sessionIds = allRowIds;
-        break;
-      case "workspace":
-        sessionIds = workspaceSliceRowIds;
-        break;
-      case "note":
-        sessionIds = [scope.sessionId];
-        break;
-    }
-
-    if (sessionIds.length === 0) {
-      setData(EMPTY);
-      setError("No notes found. Create some notes first.");
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setProgress("Collecting notes...");
+    const isCurrentRun = () =>
+      activeRunIdRef.current === runId && abortRef.current === controller;
 
     try {
-      const sessionTexts: { id: string; text: string }[] = [];
+      let sessionIds: string[];
+      switch (scope.scope) {
+        case "all":
+          sessionIds = allRowIds;
+          break;
+        case "workspace":
+          sessionIds = workspaceSliceRowIds;
+          break;
+        case "note":
+          sessionIds = [scope.sessionId];
+          break;
+      }
+
+      if (sessionIds.length === 0) {
+        if (!isCurrentRun()) return;
+        setData(EMPTY);
+        setError("No notes found. Create some notes first.");
+        return;
+      }
+
+      if (!isCurrentRun()) return;
+      setLoading(true);
+      setError(null);
+      setProgress("Collecting notes...");
+
+      const sessionArtifacts: SessionGraphArtifact[] = [];
       for (const sessionId of sessionIds) {
         const row = sessionsTable[sessionId];
         if (!row) continue;
-        const text = collectSessionText(
+        const artifact = collectSessionArtifact(
           store as main.Store,
           sessionId,
           row.raw_md,
         );
-        if (text.trim()) {
-          sessionTexts.push({ id: sessionId, text });
+        if (artifact) {
+          sessionArtifacts.push(artifact);
         }
       }
 
       console.log(
-        `[Graph] Found ${sessionIds.length} sessions, ${sessionTexts.length} with text content`,
+        `[Graph] Found ${sessionIds.length} sessions, ${sessionArtifacts.length} with text content`,
       );
 
-      if (sessionTexts.length === 0) {
+      if (sessionArtifacts.length === 0) {
+        if (!isCurrentRun()) return;
         setData(EMPTY);
         setError(
           `Found ${sessionIds.length} notes but none have text content. Add some content to your notes first.`,
         );
-        setLoading(false);
-        setProgress("");
         return;
       }
 
-      const prompt = buildPrompt(sessionTexts);
+      const prompt = buildPrompt(sessionArtifacts);
 
-      setProgress(`Sending to AI (${sessionTexts.length} notes)...`);
+      if (!isCurrentRun()) return;
+      setProgress(`Sending to AI (${sessionArtifacts.length} notes)...`);
 
       console.log(
-        `[Graph] Sending ${sessionTexts.length} notes to LLM for keyword extraction`,
+        `[Graph] Sending ${sessionArtifacts.length} notes to LLM for keyword extraction`,
       );
 
       const output = await extractWithLLM(model, prompt, controller.signal);
 
-      if (controller.signal.aborted) return;
+      if (!isCurrentRun() || controller.signal.aborted) return;
 
       console.log(
         `[Graph] LLM extracted ${output.keywords.length} keywords`,
       );
 
       if (output.keywords.length === 0) {
+        if (!isCurrentRun()) return;
         setError("No keywords found in your notes.");
         setData(EMPTY);
-        setLoading(false);
-        setProgress("");
         return;
       }
 
+      if (!isCurrentRun()) return;
       setProgress("Building graph...");
 
-      const graphData = buildGraphFromLLMOutput(output, sessionTexts);
+      const graphData = buildGraphFromLLMOutput(output, sessionArtifacts);
 
-      if (controller.signal.aborted) return;
+      if (!isCurrentRun() || controller.signal.aborted) return;
       setData(graphData);
       setError(null);
 
-      // Persist to disk
       await saveGraphData(scope, graphData);
     } catch (e) {
-      if (controller.signal.aborted) {
-        // Check if it was a timeout
-        setError("Generation timed out. Try again or use a faster model.");
-        setLoading(false);
-        setProgress("");
+      if (!isCurrentRun()) {
         return;
       }
+
+      if (controller.signal.aborted) {
+        const message = resolveAbortMessage(abortCause);
+        if (message) {
+          setError(message);
+        }
+        return;
+      }
+
       console.error("[Graph] Generation failed:", e);
       setError(e instanceof Error ? e.message : "Failed to generate graph");
       setData(EMPTY);
     } finally {
       clearTimeout(timeoutId);
-      if (!controller.signal.aborted) {
+      if (isCurrentRun()) {
         setLoading(false);
         setProgress("");
       }
     }
   }, [scope, sessionsTable, allRowIds, workspaceSliceRowIds, store, model]);
+
+  const completedSessionId = recording.lastCompletedSessionId;
+
+  const inScope =
+    completedSessionId !== null
+      ? scopeIncludesSession(scope, completedSessionId, workspaceSliceRowIds)
+      : false;
+
+  const alreadyRepresented =
+    completedSessionId !== null
+      ? data.nodes.some((node) => node.noteIds.includes(completedSessionId))
+      : false;
+
+  const shouldAutoGenerate = shouldAutoAttemptCompletedSession({
+    completedSessionId,
+    attemptedSessionId: autoAttemptedCompletedSessionId,
+    inScope,
+    loading,
+    alreadyRepresented,
+  });
+
+  useEffect(() => {
+    if (!shouldAutoGenerate || !completedSessionId) {
+      return;
+    }
+
+    setAutoAttemptedCompletedSessionId(completedSessionId);
+    void generate();
+  }, [shouldAutoGenerate, completedSessionId, generate]);
+
+  useEffect(() => {
+    if (
+      completedSessionId &&
+      autoAttemptedCompletedSessionId !== completedSessionId
+    ) {
+      setAutoAttemptedCompletedSessionId(null);
+    }
+  }, [completedSessionId, autoAttemptedCompletedSessionId]);
 
   return { data, loading, error, progress, modelReady: !!model, generate };
 }

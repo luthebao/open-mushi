@@ -51,8 +51,17 @@ function BeforeMeeingButton({
 }) {
   const remote = useRemoteMeeting(tab.id);
 
-  const { isDisabled, warningMessage } = useListenButtonState(tab.id);
+  const { isDisabled, warningMessage, warningAction, runPreflightBeforeStart } =
+    useListenButtonState(tab.id);
   const startListening = useStartListening(tab.id);
+
+  const handleStartListening = useCallback(() => {
+    void runPreflightBeforeStart().then((result) => {
+      if (result.ok) {
+        startListening();
+      }
+    });
+  }, [runPreflightBeforeStart, startListening]);
 
   const handleJoin = useCallback(() => {
     if (remote?.url) {
@@ -66,8 +75,9 @@ function BeforeMeeingButton({
         remote={remote}
         disabled={isDisabled}
         warningMessage={warningMessage}
+        warningAction={warningAction}
         onJoin={handleJoin}
-        onStartListening={startListening}
+        onStartListening={handleStartListening}
         sessionId={tab.id}
       />
     );
@@ -84,7 +94,8 @@ function BeforeMeeingButton({
       }
       disabled={isDisabled}
       warningMessage={warningMessage}
-      onPrimaryClick={startListening}
+      warningAction={warningAction}
+      onPrimaryClick={handleStartListening}
       sessionId={tab.id}
     />
   );
@@ -98,6 +109,7 @@ function SplitMeetingButtons({
   remote,
   disabled,
   warningMessage,
+  warningAction,
   onJoin,
   onStartListening,
   sessionId,
@@ -105,6 +117,7 @@ function SplitMeetingButtons({
   remote: RemoteMeeting;
   disabled: boolean;
   warningMessage: string;
+  warningAction?: { label: string; handleClick: () => void };
   onJoin: () => void;
   onStartListening: () => void;
   sessionId: string;
@@ -129,9 +142,8 @@ function SplitMeetingButtons({
   }, [leftsidebar.expanded]);
 
   const handleConfigure = useCallback(() => {
-    onStartListening();
     openNew({ type: "ai", state: { tab: "transcription" } });
-  }, [onStartListening, openNew]);
+  }, [openNew]);
 
   const getMeetingIcon = () => {
     switch (remote.type) {
@@ -190,10 +202,17 @@ function SplitMeetingButtons({
                   content: (
                     <ActionableTooltipContent
                       message={warningMessage}
-                      action={{
-                        label: "Configure",
-                        handleClick: handleConfigure,
-                      }}
+                      action={
+                        warningAction
+                          ? {
+                              label: warningAction.label,
+                              handleClick: warningAction.handleClick,
+                            }
+                          : {
+                              label: "Configure",
+                              handleClick: handleConfigure,
+                            }
+                      }
                     />
                   ),
                 }
@@ -218,12 +237,14 @@ function ListenSplitButton({
   content,
   disabled,
   warningMessage,
+  warningAction,
   onPrimaryClick,
   sessionId,
 }: {
   content: React.ReactNode;
   disabled: boolean;
   warningMessage: string;
+  warningAction?: { label: string; handleClick: () => void };
   onPrimaryClick: () => void;
   sessionId: string;
 }) {
@@ -231,9 +252,8 @@ function ListenSplitButton({
   const countdown = useEventCountdown(sessionId);
 
   const handleAction = useCallback(() => {
-    onPrimaryClick();
     openNew({ type: "ai", state: { tab: "transcription" } });
-  }, [onPrimaryClick, openNew]);
+  }, [openNew]);
 
   return (
     <div className="relative">
@@ -254,10 +274,17 @@ function ListenSplitButton({
                   content: (
                     <ActionableTooltipContent
                       message={warningMessage}
-                      action={{
-                        label: "Configure",
-                        handleClick: handleAction,
-                      }}
+                      action={
+                        warningAction
+                          ? {
+                              label: warningAction.label,
+                              handleClick: warningAction.handleClick,
+                            }
+                          : {
+                              label: "Configure",
+                              handleClick: handleAction,
+                            }
+                      }
                     />
                   ),
                 }

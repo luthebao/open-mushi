@@ -97,6 +97,18 @@ impl ListenerRuntime for CliRuntime {
                     "[recording] session={session_id:?} state={state:?} queue_depth={queue_depth} current_job={current_job_session_id:?} reason={reason:?}"
                 );
             }
+            SessionRecordingEvent::RecordingDiagnostic {
+                session_id,
+                stage,
+                queue_depth,
+                latency_ms,
+                message,
+                error,
+            } => {
+                eprintln!(
+                    "[recording][diag] session={session_id:?} stage={stage} queue_depth={queue_depth} latency_ms={latency_ms:?} message={message} error={error:?}"
+                );
+            }
         }
     }
 }

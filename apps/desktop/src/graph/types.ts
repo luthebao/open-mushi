@@ -3,11 +3,21 @@ export type GraphScope =
   | { scope: "workspace"; workspaceId: string }
   | { scope: "note"; sessionId: string };
 
+export type GraphSessionArtifact = {
+  hasSummary: boolean;
+  hasTranscript: boolean;
+  hasTimestamps: boolean;
+  hasSpeakerMetadata: boolean;
+  startedAt: number | null;
+  endedAt: number | null;
+};
+
 export type GraphNode = {
   id: string;
   label: string;
   frequency: number;
   noteIds: string[];
+  sessionArtifacts?: Record<string, GraphSessionArtifact>;
 };
 
 export type GraphEdge = {

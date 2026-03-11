@@ -212,7 +212,8 @@ function EmptyState({ onGenerate }: { onGenerate: () => void }) {
           Knowledge Graph
         </p>
         <p className="text-xs text-neutral-300">
-          Click Generate to extract keywords from your notes using AI
+          Graph context auto-seeds when recording reaches Completed. You can also
+          generate manually at any time.
         </p>
       </div>
       <Button

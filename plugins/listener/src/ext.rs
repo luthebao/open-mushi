@@ -180,10 +180,19 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Listener<'a, R, M> {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn start_session(&self, params: SessionParams) {
+    pub async fn start_session(&self, params: SessionParams) -> Result<(), crate::Error> {
         if let Some(cell) = registry::where_is(RootActor::name()) {
             let actor: ActorRef<RootMsg> = cell.into();
-            let _ = ractor::call!(actor, RootMsg::StartSession, params);
+            let started = ractor::call!(actor, RootMsg::StartSession, params)
+                .map_err(|_| crate::Error::StartSessionFailed)?;
+
+            if started {
+                Ok(())
+            } else {
+                Err(crate::Error::StartSessionFailed)
+            }
+        } else {
+            Err(crate::Error::ActorNotFound(RootActor::name()))
         }
     }
 

@@ -10,6 +10,8 @@ import {
   type DegradedError,
   commands as listenerCommands,
   events as listenerEvents,
+  type ListenerPreflightCheck,
+  type ListenerPreflightReport,
   type RecordingState,
   type RecordingStatus,
   type SessionDataEvent,
@@ -74,10 +76,25 @@ export type GeneralState = {
     degraded: DegradedError | null;
     recording: {
       state: RecordingState;
+      sessionId: string | null;
+      lastCompletedSessionId: string | null;
       queueDepth: number;
       currentJobSessionId: string | null;
       lastReason: string | null;
       lastError: string | null;
+      preflight: {
+        report: ListenerPreflightReport | null;
+        loading: boolean;
+        checkedAt: number | null;
+      };
+      diagnostics: {
+        stage: string;
+        message: string;
+        queueDepth: number;
+        latencyMs: number | null;
+        error: string | null;
+        sessionId: string | null;
+      } | null;
     };
   };
 };
@@ -95,15 +112,28 @@ export type GeneralActions = {
   ) => Promise<void>;
   getSessionMode: (sessionId: string) => SessionMode;
   getRecordingStatus: () => Promise<RecordingStatus | null>;
-  clearStaleRecordingState: () => Promise<void>;
+  runPreflight: () => Promise<ListenerPreflightReport | null>;
+  clearStaleRecordingState: () => Promise<boolean>;
+  getPreflightFailureSummary: () => {
+    blockingFailures: ListenerPreflightCheck[];
+    warningFailures: ListenerPreflightCheck[];
+  };
 };
 
 const initialRecordingState: GeneralState["live"]["recording"] = {
   state: "idle",
+  sessionId: null,
+  lastCompletedSessionId: null,
   queueDepth: 0,
   currentJobSessionId: null,
   lastReason: null,
   lastError: null,
+  preflight: {
+    report: null,
+    loading: false,
+    checkedAt: null,
+  },
+  diagnostics: null,
 };
 
 const initialState: GeneralState = {
@@ -161,6 +191,10 @@ const startSessionEffect = (params: SessionParams) =>
   fromResult(listenerCommands.startSession(params));
 const stopSessionEffect = () => fromResult(listenerCommands.stopSession());
 
+const cleanupEventUnlisteners = (unlisteners?: (() => void)[]) => {
+  unlisteners?.forEach((fn) => fn());
+};
+
 export const createGeneralSlice = <
   T extends GeneralState &
     GeneralActions &
@@ -192,6 +226,7 @@ export const createGeneralSlice = <
       mutate(state, (draft) => {
         draft.live.loading = true;
         draft.live.sessionId = targetSessionId;
+        draft.live.recording.preflight.loading = true;
       }),
     );
 
@@ -261,6 +296,10 @@ export const createGeneralSlice = <
           currentState.live.eventUnlisteners.forEach((fn) => fn());
         }
 
+        if (currentState.live.intervalId) {
+          clearInterval(currentState.live.intervalId);
+        }
+
         void iconCommands.setRecordingIndicator(false);
 
         set((state) =>
@@ -269,6 +308,7 @@ export const createGeneralSlice = <
             draft.live.loading = false;
             draft.live.loadingPhase = "idle";
             draft.live.sessionId = null;
+            draft.live.intervalId = undefined;
             draft.live.eventUnlisteners = undefined;
             draft.live.lastError = payload.error ?? null;
             draft.live.device = null;
@@ -365,19 +405,38 @@ export const createGeneralSlice = <
     };
 
     const handleRecordingEvent = (payload: SessionRecordingEvent) => {
-      if (payload.type !== "recording_state_changed") {
+      if (payload.type === "recording_state_changed") {
+        set((state) =>
+          mutate(state, (draft) => {
+            draft.live.recording.state = payload.state;
+            draft.live.recording.sessionId = payload.session_id;
+            draft.live.recording.queueDepth = payload.queue_depth;
+            draft.live.recording.currentJobSessionId =
+              payload.current_job_session_id;
+            draft.live.recording.lastReason = payload.reason ?? null;
+
+            if (payload.state === "completed" && payload.session_id) {
+              draft.live.recording.lastCompletedSessionId = payload.session_id;
+            }
+          }),
+        );
         return;
       }
 
-      set((state) =>
-        mutate(state, (draft) => {
-          draft.live.recording.state = payload.state;
-          draft.live.recording.queueDepth = payload.queue_depth;
-          draft.live.recording.currentJobSessionId =
-            payload.current_job_session_id;
-          draft.live.recording.lastReason = payload.reason ?? null;
-        }),
-      );
+      if (payload.type === "recording_diagnostic") {
+        set((state) =>
+          mutate(state, (draft) => {
+            draft.live.recording.diagnostics = {
+              stage: payload.stage,
+              message: payload.message,
+              queueDepth: payload.queue_depth,
+              latencyMs: payload.latency_ms ?? null,
+              error: payload.error ?? null,
+              sessionId: payload.session_id,
+            };
+          }),
+        );
+      }
     };
 
     const program = Effect.gen(function* () {
@@ -432,6 +491,50 @@ export const createGeneralSlice = <
         },
       });
 
+      const preflightResult = yield* Effect.tryPromise({
+        try: () => listenerCommands.preflight(),
+        catch: (error) => error,
+      });
+
+      if (preflightResult.status === "error") {
+        cleanupEventUnlisteners(unlisteners);
+        set((state) =>
+          mutate(state, (draft) => {
+            draft.live.eventUnlisteners = undefined;
+            draft.live.recording.preflight.loading = false;
+            draft.live.loading = false;
+            draft.live.loadingPhase = "idle";
+            draft.live.status = "inactive";
+            draft.live.sessionId = null;
+            draft.live.lastError = `preflight_unavailable: ${preflightResult.error}`;
+          }),
+        );
+        return;
+      }
+
+      set((state) =>
+        mutate(state, (draft) => {
+          draft.live.recording.preflight.report = preflightResult.data;
+          draft.live.recording.preflight.checkedAt = Date.now();
+          draft.live.recording.preflight.loading = false;
+        }),
+      );
+
+      if (!preflightResult.data.ok) {
+        cleanupEventUnlisteners(unlisteners);
+        set((state) =>
+          mutate(state, (draft) => {
+            draft.live.eventUnlisteners = undefined;
+            draft.live.loading = false;
+            draft.live.loadingPhase = "idle";
+            draft.live.status = "inactive";
+            draft.live.sessionId = null;
+            draft.live.lastError = "preflight_failed";
+          }),
+        );
+        return;
+      }
+
       yield* startSessionEffect(params);
 
       const recordingStatusResult = yield* Effect.tryPromise({
@@ -443,6 +546,8 @@ export const createGeneralSlice = <
         set((state) =>
           mutate(state, (draft) => {
             draft.live.recording.state = recordingStatusResult.data.state;
+            draft.live.recording.sessionId =
+              recordingStatusResult.data.activeSessionId;
             draft.live.recording.queueDepth =
               recordingStatusResult.data.queueDepth;
             draft.live.recording.currentJobSessionId =
@@ -452,20 +557,20 @@ export const createGeneralSlice = <
           }),
         );
       }
-
-      set((state) =>
-        mutate(state, (draft) => {
-          draft.live.status = "active";
-          draft.live.loading = false;
-          draft.live.sessionId = targetSessionId;
-        }),
-      );
     });
 
     void Effect.runPromiseExit(program).then((exit) => {
       Exit.match(exit, {
         onFailure: (cause) => {
-          console.error(JSON.stringify(cause));
+          const failureMessage = (() => {
+            try {
+              return JSON.stringify(cause);
+            } catch {
+              return String(cause);
+            }
+          })();
+
+          console.error(failureMessage);
           set((state) =>
             mutate(state, (draft) => {
               if (draft.live.intervalId) {
@@ -484,10 +589,19 @@ export const createGeneralSlice = <
               draft.live.seconds = 0;
               draft.live.sessionId = null;
               draft.live.muted = initialState.live.muted;
-              draft.live.lastError = null;
+              draft.live.lastError = failureMessage;
               draft.live.device = null;
               draft.live.degraded = null;
-              draft.live.recording = initialRecordingState;
+              draft.live.recording.state = initialRecordingState.state;
+              draft.live.recording.sessionId = initialRecordingState.sessionId;
+              draft.live.recording.lastCompletedSessionId =
+                initialRecordingState.lastCompletedSessionId;
+              draft.live.recording.queueDepth = initialRecordingState.queueDepth;
+              draft.live.recording.currentJobSessionId =
+                initialRecordingState.currentJobSessionId;
+              draft.live.recording.lastReason = initialRecordingState.lastReason;
+              draft.live.recording.lastError = initialRecordingState.lastError;
+              draft.live.recording.diagnostics = initialRecordingState.diagnostics;
             }),
           );
         },
@@ -666,6 +780,14 @@ export const createGeneralSlice = <
     set((state) =>
       mutate(state, (draft) => {
         draft.live.recording.state = result.data.state;
+        draft.live.recording.sessionId = result.data.activeSessionId;
+        if (
+          result.data.state === "completed" &&
+          result.data.activeSessionId !== null
+        ) {
+          draft.live.recording.lastCompletedSessionId =
+            result.data.activeSessionId;
+        }
         draft.live.recording.queueDepth = result.data.queueDepth;
         draft.live.recording.currentJobSessionId =
           result.data.currentJobSessionId;
@@ -675,14 +797,44 @@ export const createGeneralSlice = <
 
     return result.data;
   },
+  runPreflight: async () => {
+    set((state) =>
+      mutate(state, (draft) => {
+        draft.live.recording.preflight.loading = true;
+      }),
+    );
+
+    const result = await listenerCommands.preflight();
+    if (result.status === "error") {
+      console.error("[listener] preflight failed:", result.error);
+      set((state) =>
+        mutate(state, (draft) => {
+          draft.live.recording.preflight.loading = false;
+        }),
+      );
+      return null;
+    }
+
+    set((state) =>
+      mutate(state, (draft) => {
+        draft.live.recording.preflight.report = result.data;
+        draft.live.recording.preflight.checkedAt = Date.now();
+        draft.live.recording.preflight.loading = false;
+      }),
+    );
+
+    return result.data;
+  },
   clearStaleRecordingState: async () => {
+    const before = await get().getRecordingStatus();
+
     const result = await listenerCommands.clearStaleRecordingState();
     if (result.status === "error") {
       console.error(
         "[listener] clearStaleRecordingState failed:",
         result.error,
       );
-      return;
+      return false;
     }
 
     const refreshedStatus = await listenerCommands.getRecordingStatus();
@@ -690,6 +842,7 @@ export const createGeneralSlice = <
       set((state) =>
         mutate(state, (draft) => {
           draft.live.recording.state = refreshedStatus.data.state;
+          draft.live.recording.sessionId = refreshedStatus.data.activeSessionId;
           draft.live.recording.queueDepth = refreshedStatus.data.queueDepth;
           draft.live.recording.currentJobSessionId =
             refreshedStatus.data.currentJobSessionId;
@@ -698,5 +851,31 @@ export const createGeneralSlice = <
         }),
       );
     }
+
+    if (!before || refreshedStatus.status !== "ok") {
+      return false;
+    }
+
+    const normalizedToIdle =
+      before.state !== "idle" && refreshedStatus.data.state === "idle";
+    const queueReduced = refreshedStatus.data.queueDepth < before.queueDepth;
+    const jobCleared =
+      before.currentJobSessionId !== null &&
+      refreshedStatus.data.currentJobSessionId === null;
+    const sessionCleared =
+      before.activeSessionId !== null &&
+      refreshedStatus.data.activeSessionId === null;
+
+    return normalizedToIdle || queueReduced || jobCleared || sessionCleared;
+  },
+  getPreflightFailureSummary: () => {
+    const checks = get().live.recording.preflight.report?.checks ?? [];
+    const blockingFailures = checks.filter((check) => check.status === "error");
+    const warningFailures = checks.filter((check) => check.status === "warning");
+
+    return {
+      blockingFailures,
+      warningFailures,
+    };
   },
 });

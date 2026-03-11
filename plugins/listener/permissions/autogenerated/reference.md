@@ -12,6 +12,9 @@ Default permissions for the plugin
 - `allow-get-mic-muted`
 - `allow-set-mic-muted`
 - `allow-get-state`
+- `allow-get-recording-status`
+- `allow-clear-stale-recording-state`
+- `allow-preflight`
 - `allow-run-batch`
 - `allow-is-supported-languages-live`
 - `allow-suggest-providers-for-languages-live`

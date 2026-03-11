@@ -3,7 +3,7 @@ import { StickyNoteIcon, XIcon } from "lucide-react";
 import { useSession } from "~/store/tinybase/hooks";
 import { useTabs } from "~/store/zustand/tabs";
 
-import type { GraphNode } from "./types";
+import type { GraphNode, GraphSessionArtifact } from "./types";
 
 type NodeDetailPanelProps = {
   node: GraphNode;
@@ -31,9 +31,13 @@ export function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {node.noteIds.map((noteId) => (
-            <NoteItem key={noteId} sessionId={noteId} />
+            <NoteItem
+              key={noteId}
+              sessionId={noteId}
+              artifact={node.sessionArtifacts?.[noteId]}
+            />
           ))}
         </div>
       </div>
@@ -41,19 +45,49 @@ export function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
   );
 }
 
-function NoteItem({ sessionId }: { sessionId: string }) {
+function NoteItem({
+  sessionId,
+  artifact,
+}: {
+  sessionId: string;
+  artifact?: GraphSessionArtifact;
+}) {
   const session = useSession(sessionId);
   const openNew = useTabs((state) => state.openNew);
 
+  const provenanceParts = [
+    artifact?.hasSummary ? "summary" : null,
+    artifact?.hasTranscript ? "transcript" : null,
+  ].filter((value): value is string => Boolean(value));
+
+  const metadataParts = [
+    artifact?.hasTimestamps ? "time" : null,
+    artifact?.hasSpeakerMetadata ? "speaker" : null,
+  ].filter((value): value is string => Boolean(value));
+
   return (
     <button
-      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-neutral-100"
+      className="flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left transition-colors hover:bg-neutral-100"
       onClick={() => openNew({ type: "sessions", id: sessionId })}
     >
-      <StickyNoteIcon className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-      <span className="truncate text-xs text-neutral-700">
-        {session.title || "Untitled"}
-      </span>
+      <div className="flex w-full items-center gap-2">
+        <StickyNoteIcon className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+        <span className="truncate text-xs text-neutral-700">
+          {session.title || "Untitled"}
+        </span>
+      </div>
+      {artifact && (
+        <div className="flex flex-wrap gap-1 pl-5">
+          <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">
+            from {provenanceParts.join("+") || "raw"}
+          </span>
+          {metadataParts.length > 0 && (
+            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">
+              metadata: {metadataParts.join("+")}
+            </span>
+          )}
+        </div>
+      )}
     </button>
   );
 }

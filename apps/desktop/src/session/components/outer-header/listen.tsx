@@ -2,7 +2,6 @@ import { useHover } from "@uidotdev/usehooks";
 import { MicOff } from "lucide-react";
 import { useCallback } from "react";
 
-import type { RecordingState } from "@openmushi/plugin-listener";
 import { DancingSticks } from "@openmushi/ui/components/ui/dancing-sticks";
 import {
   Tooltip,
@@ -17,66 +16,55 @@ import {
   useHasTranscript,
   useListenButtonState,
 } from "~/session/components/shared";
+import {
+  getRecordingStatusChipLabel,
+  getRecordingStatusChipTone,
+} from "~/session/components/outer-header/recording-status";
 import { useTabs } from "~/store/zustand/tabs";
 import { useListener } from "~/stt/contexts";
 import { useStartListening } from "~/stt/useStartListening";
 
-type ChipTone = "live" | "working" | "error" | "neutral";
-
-export function getRecordingStatusChipLabel(
-  state: RecordingState,
-  queueDepth: number,
-): string {
-  if (state === "starting") return "Starting";
-  if (state === "recording") return "Recording";
-  if (state === "stopping") return "Stopping";
-  if (state === "queuedForStt" || state === "queuedForLlm") {
-    return queueDepth > 0 ? `Queued · ${queueDepth}` : "Queued";
-  }
-  if (state === "transcribing") return "Transcribing";
-  if (state === "summarizing") return "Summarizing";
-  if (state === "completed") return "Completed";
-  if (state === "failed") return "Failed";
-  return "Ready";
-}
-
-export function getRecordingStatusChipTone(state: RecordingState): ChipTone {
-  if (state === "recording" || state === "starting") return "live";
-  if (
-    state === "stopping" ||
-    state === "queuedForStt" ||
-    state === "queuedForLlm" ||
-    state === "transcribing" ||
-    state === "summarizing"
-  ) {
-    return "working";
-  }
-  if (state === "failed") return "error";
-  return "neutral";
-}
-
 function RecordingStatusChip({ sessionId }: { sessionId: string }) {
-  const { state, queueDepth } = useListener((store) => ({
-    state: store.live.recording.state,
-    queueDepth: store.live.recording.queueDepth,
-  }));
+  const { state, queueDepth, currentJobSessionId, diagnostics } = useListener(
+    (store) => ({
+      state: store.live.recording.state,
+      queueDepth: store.live.recording.queueDepth,
+      currentJobSessionId: store.live.recording.currentJobSessionId,
+      diagnostics: store.live.recording.diagnostics,
+    }),
+  );
 
-  const label = getRecordingStatusChipLabel(state, queueDepth);
+  const label = getRecordingStatusChipLabel(
+    state,
+    queueDepth,
+    currentJobSessionId,
+  );
   const tone = getRecordingStatusChipTone(state);
 
+  const diagnosticsLabel = diagnostics
+    ? `${diagnostics.stage} · ${diagnostics.message}`
+    : null;
+
   return (
-    <span
-      className={cn([
-        "inline-flex h-7 items-center rounded-md px-2 text-[11px] font-medium",
-        tone === "live" && "bg-red-100 text-red-700",
-        tone === "working" && "bg-amber-100 text-amber-700",
-        tone === "error" && "bg-red-100 text-red-700",
-        tone === "neutral" && "bg-neutral-200 text-neutral-700",
-      ])}
-      data-session-id={sessionId}
-    >
-      {label}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn([
+            "inline-flex h-7 items-center rounded-md px-2 text-[11px] font-medium",
+            tone === "live" && "bg-red-100 text-red-700",
+            tone === "working" && "bg-amber-100 text-amber-700",
+            tone === "error" && "bg-red-100 text-red-700",
+            tone === "neutral" && "bg-neutral-200 text-neutral-700",
+          ])}
+          data-session-id={sessionId}
+        >
+          {label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {diagnosticsLabel ?? "Backend recording status"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -96,7 +84,12 @@ export function ListenButton({ sessionId }: { sessionId: string }) {
 }
 
 function StartButton({ sessionId }: { sessionId: string }) {
-  const { isDisabled, warningMessage } = useListenButtonState(sessionId);
+  const {
+    isDisabled,
+    warningMessage,
+    warningAction,
+    runPreflightBeforeStart,
+  } = useListenButtonState(sessionId);
   const hasTranscript = useHasTranscript(sessionId);
   const handleClick = useStartListening(sessionId);
   const openNew = useTabs((state) => state.openNew);
@@ -105,10 +98,18 @@ function StartButton({ sessionId }: { sessionId: string }) {
     openNew({ type: "ai", state: { tab: "transcription" } });
   }, [openNew]);
 
+
+  const handleStart = useCallback(() => {
+    void runPreflightBeforeStart().then((result) => {
+      if (result.ok) {
+        handleClick();
+      }
+    });
+  }, [runPreflightBeforeStart, handleClick]);
   const button = (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={handleStart}
       disabled={isDisabled}
       className={cn([
         "inline-flex items-center justify-center rounded-md text-xs font-semibold",
@@ -144,10 +145,17 @@ function StartButton({ sessionId }: { sessionId: string }) {
       <TooltipContent side="bottom">
         <ActionableTooltipContent
           message={warningMessage}
-          action={{
-            label: "Configure",
-            handleClick: handleConfigureAction,
-          }}
+          action={
+            warningAction
+              ? {
+                  label: warningAction.label,
+                  handleClick: warningAction.handleClick,
+                }
+              : {
+                  label: "Configure",
+                  handleClick: handleConfigureAction,
+                }
+          }
         />
       </TooltipContent>
     </Tooltip>
