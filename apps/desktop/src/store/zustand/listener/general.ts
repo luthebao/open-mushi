@@ -10,11 +10,14 @@ import {
   type DegradedError,
   commands as listenerCommands,
   events as listenerEvents,
+  type RecordingState,
+  type RecordingStatus,
   type SessionDataEvent,
   type SessionErrorEvent,
   type SessionLifecycleEvent,
   type SessionParams,
   type SessionProgressEvent,
+  type SessionRecordingEvent,
   type StreamResponse,
 } from "@openmushi/plugin-listener";
 import {
@@ -69,6 +72,13 @@ export type GeneralState = {
     lastError: string | null;
     device: string | null;
     degraded: DegradedError | null;
+    recording: {
+      state: RecordingState;
+      queueDepth: number;
+      currentJobSessionId: string | null;
+      lastReason: string | null;
+      lastError: string | null;
+    };
   };
 };
 
@@ -84,6 +94,16 @@ export type GeneralActions = {
     options?: { handlePersist?: HandlePersistCallback; sessionId?: string },
   ) => Promise<void>;
   getSessionMode: (sessionId: string) => SessionMode;
+  getRecordingStatus: () => Promise<RecordingStatus | null>;
+  clearStaleRecordingState: () => Promise<void>;
+};
+
+const initialRecordingState: GeneralState["live"]["recording"] = {
+  state: "idle",
+  queueDepth: 0,
+  currentJobSessionId: null,
+  lastReason: null,
+  lastError: null,
 };
 
 const initialState: GeneralState = {
@@ -98,6 +118,7 @@ const initialState: GeneralState = {
     lastError: null,
     device: null,
     degraded: null,
+    recording: initialRecordingState,
   },
 };
 
@@ -106,6 +127,7 @@ type EventListeners = {
   progress: (payload: SessionProgressEvent) => void;
   error: (payload: SessionErrorEvent) => void;
   data: (payload: SessionDataEvent) => void;
+  recording: (payload: SessionRecordingEvent) => void;
 };
 
 const listenToAllSessionEvents = (
@@ -125,6 +147,9 @@ const listenToAllSessionEvents = (
         ),
         listenerEvents.sessionDataEvent.listen(({ payload }) =>
           handlers.data(payload),
+        ),
+        listenerEvents.sessionRecordingEvent.listen(({ payload }) =>
+          handlers.recording(payload),
         ),
       ]);
       return unlisteners;
@@ -339,12 +364,29 @@ export const createGeneralSlice = <
       }
     };
 
+    const handleRecordingEvent = (payload: SessionRecordingEvent) => {
+      if (payload.type !== "recording_state_changed") {
+        return;
+      }
+
+      set((state) =>
+        mutate(state, (draft) => {
+          draft.live.recording.state = payload.state;
+          draft.live.recording.queueDepth = payload.queue_depth;
+          draft.live.recording.currentJobSessionId =
+            payload.current_job_session_id;
+          draft.live.recording.lastReason = payload.reason ?? null;
+        }),
+      );
+    };
+
     const program = Effect.gen(function* () {
       const unlisteners = yield* listenToAllSessionEvents({
         lifecycle: handleLifecycleEvent,
         progress: handleProgressEvent,
         error: handleErrorEvent,
         data: handleDataEvent,
+        recording: handleRecordingEvent,
       });
 
       set((state) =>
@@ -391,6 +433,26 @@ export const createGeneralSlice = <
       });
 
       yield* startSessionEffect(params);
+
+      const recordingStatusResult = yield* Effect.tryPromise({
+        try: () => listenerCommands.getRecordingStatus(),
+        catch: (error) => error,
+      });
+
+      if (recordingStatusResult.status === "ok") {
+        set((state) =>
+          mutate(state, (draft) => {
+            draft.live.recording.state = recordingStatusResult.data.state;
+            draft.live.recording.queueDepth =
+              recordingStatusResult.data.queueDepth;
+            draft.live.recording.currentJobSessionId =
+              recordingStatusResult.data.currentJobSessionId;
+            draft.live.recording.lastError =
+              recordingStatusResult.data.lastError;
+          }),
+        );
+      }
+
       set((state) =>
         mutate(state, (draft) => {
           draft.live.status = "active";
@@ -425,6 +487,7 @@ export const createGeneralSlice = <
               draft.live.lastError = null;
               draft.live.device = null;
               draft.live.degraded = null;
+              draft.live.recording = initialRecordingState;
             }),
           );
         },
@@ -592,5 +655,48 @@ export const createGeneralSlice = <
     }
 
     return "inactive";
+  },
+  getRecordingStatus: async () => {
+    const result = await listenerCommands.getRecordingStatus();
+    if (result.status === "error") {
+      console.error("[listener] getRecordingStatus failed:", result.error);
+      return null;
+    }
+
+    set((state) =>
+      mutate(state, (draft) => {
+        draft.live.recording.state = result.data.state;
+        draft.live.recording.queueDepth = result.data.queueDepth;
+        draft.live.recording.currentJobSessionId =
+          result.data.currentJobSessionId;
+        draft.live.recording.lastError = result.data.lastError;
+      }),
+    );
+
+    return result.data;
+  },
+  clearStaleRecordingState: async () => {
+    const result = await listenerCommands.clearStaleRecordingState();
+    if (result.status === "error") {
+      console.error(
+        "[listener] clearStaleRecordingState failed:",
+        result.error,
+      );
+      return;
+    }
+
+    const refreshedStatus = await listenerCommands.getRecordingStatus();
+    if (refreshedStatus.status === "ok") {
+      set((state) =>
+        mutate(state, (draft) => {
+          draft.live.recording.state = refreshedStatus.data.state;
+          draft.live.recording.queueDepth = refreshedStatus.data.queueDepth;
+          draft.live.recording.currentJobSessionId =
+            refreshedStatus.data.currentJobSessionId;
+          draft.live.recording.lastError = refreshedStatus.data.lastError;
+          draft.live.recording.lastReason = "manual_clear";
+        }),
+      );
+    }
   },
 });

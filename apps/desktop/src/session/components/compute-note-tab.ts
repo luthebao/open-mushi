@@ -12,12 +12,16 @@ export function computeCurrentNoteTab(
     return { type: "raw" };
   }
 
-  if (tabView) {
+  if (tabView?.type === "transcript" || tabView?.type === "enhanced") {
     return tabView;
   }
 
   if (firstEnhancedNoteId) {
     return { type: "enhanced", id: firstEnhancedNoteId };
+  }
+
+  if (tabView) {
+    return tabView;
   }
 
   return { type: "raw" };

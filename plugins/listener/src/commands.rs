@@ -69,6 +69,31 @@ pub async fn get_state<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_recording_status<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<openmushi_listener_core::RecordingStatus, String> {
+    Ok(app.listener().get_recording_status().await)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clear_stale_recording_state<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+    app.listener().clear_stale_recording_state().await;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn preflight<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<openmushi_listener_core::ListenerPreflightReport, String> {
+    Ok(app.listener().preflight().await)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn is_supported_languages_live<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     provider: String,

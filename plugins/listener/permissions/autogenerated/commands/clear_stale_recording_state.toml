@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-clear-stale-recording-state"
+description = "Enables the clear_stale_recording_state command without any pre-configured scope."
+commands.allow = ["clear_stale_recording_state"]
+
+[[permission]]
+identifier = "deny-clear-stale-recording-state"
+description = "Denies the clear_stale_recording_state command without any pre-configured scope."
+commands.deny = ["clear_stale_recording_state"]

@@ -24,11 +24,14 @@ openmushi-audio = { workspace = true }
 openmushi-language = { workspace = true }
 openmushi-listener-core = { workspace = true, features = ["specta", "tauri-event"] }
 openmushi-storage = { workspace = true }
+openmushi-tiptap = { workspace = true }
 openmushi-transcript = { workspace = true }
 owhisper-client = { workspace = true }
 owhisper-interface = { workspace = true }
 
+tauri-plugin-fs-db = { workspace = true }
 tauri-plugin-hooks = { workspace = true }
+tauri-plugin-local-llm = { workspace = true }
 tauri-plugin-local-stt = { workspace = true }
 tauri-plugin-settings = { workspace = true }
 tauri-plugin-tray = { workspace = true }
@@ -43,5 +46,6 @@ ractor = { workspace = true, features = ["async-trait"] }
 dirs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

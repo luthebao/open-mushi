@@ -28,6 +28,9 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::start_session::<tauri::Wry>,
             commands::stop_session::<tauri::Wry>,
             commands::get_state::<tauri::Wry>,
+            commands::get_recording_status::<tauri::Wry>,
+            commands::clear_stale_recording_state::<tauri::Wry>,
+            commands::preflight::<tauri::Wry>,
             commands::is_supported_languages_live::<tauri::Wry>,
             commands::suggest_providers_for_languages_live::<tauri::Wry>,
             commands::list_documented_language_codes_live::<tauri::Wry>,
@@ -36,7 +39,8 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             SessionLifecycleEvent,
             SessionProgressEvent,
             SessionErrorEvent,
-            SessionDataEvent
+            SessionDataEvent,
+            SessionRecordingEvent
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }

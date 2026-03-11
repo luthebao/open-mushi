@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the clear_stale_recording_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-clear-stale-recording-state",
+          "markdownDescription": "Enables the clear_stale_recording_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clear_stale_recording_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-clear-stale-recording-state",
+          "markdownDescription": "Denies the clear_stale_recording_state command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_current_microphone_device command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-current-microphone-device",
@@ -317,6 +329,18 @@
           "type": "string",
           "const": "deny-get-mic-muted",
           "markdownDescription": "Denies the get_mic_muted command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_recording_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-recording-status",
+          "markdownDescription": "Enables the get_recording_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_recording_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-recording-status",
+          "markdownDescription": "Denies the get_recording_status command without any pre-configured scope."
         },
         {
           "description": "Enables the get_state command without any pre-configured scope.",
@@ -377,6 +401,18 @@
           "type": "string",
           "const": "deny-list-microphone-devices",
           "markdownDescription": "Denies the list_microphone_devices command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the preflight command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-preflight",
+          "markdownDescription": "Enables the preflight command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the preflight command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-preflight",
+          "markdownDescription": "Denies the preflight command without any pre-configured scope."
         },
         {
           "description": "Enables the run_batch command without any pre-configured scope.",

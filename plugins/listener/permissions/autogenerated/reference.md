@@ -29,6 +29,32 @@ Default permissions for the plugin
 <tr>
 <td>
 
+`listener:allow-clear-stale-recording-state`
+
+</td>
+<td>
+
+Enables the clear_stale_recording_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`listener:deny-clear-stale-recording-state`
+
+</td>
+<td>
+
+Denies the clear_stale_recording_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `listener:allow-get-current-microphone-device`
 
 </td>
@@ -74,6 +100,32 @@ Enables the get_mic_muted command without any pre-configured scope.
 <td>
 
 Denies the get_mic_muted command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`listener:allow-get-recording-status`
+
+</td>
+<td>
+
+Enables the get_recording_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`listener:deny-get-recording-status`
+
+</td>
+<td>
+
+Denies the get_recording_status command without any pre-configured scope.
 
 </td>
 </tr>
@@ -204,6 +256,32 @@ Enables the list_microphone_devices command without any pre-configured scope.
 <td>
 
 Denies the list_microphone_devices command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`listener:allow-preflight`
+
+</td>
+<td>
+
+Enables the preflight command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`listener:deny-preflight`
+
+</td>
+<td>
+
+Denies the preflight command without any pre-configured scope.
 
 </td>
 </tr>

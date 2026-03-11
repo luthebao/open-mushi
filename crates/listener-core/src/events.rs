@@ -1,6 +1,6 @@
 use owhisper_interface::stream::StreamResponse;
 
-use crate::DegradedError;
+use crate::{DegradedError, RecordingState};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -73,5 +73,32 @@ pub enum SessionDataEvent {
     StreamResponse {
         session_id: String,
         response: Box<StreamResponse>,
+    },
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[cfg_attr(feature = "tauri-event", derive(tauri_specta::Event))]
+#[serde(tag = "type")]
+pub enum SessionRecordingEvent {
+    #[serde(rename = "recording_state_changed")]
+    RecordingStateChanged {
+        session_id: Option<String>,
+        state: RecordingState,
+        queue_depth: usize,
+        current_job_session_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    #[serde(rename = "recording_diagnostic")]
+    RecordingDiagnostic {
+        session_id: Option<String>,
+        stage: String,
+        queue_depth: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        latency_ms: Option<u64>,
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
 }

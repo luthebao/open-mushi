@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use listener_core::{
     ListenerRuntime, SessionDataEvent, SessionErrorEvent, SessionLifecycleEvent,
-    SessionProgressEvent,
+    SessionProgressEvent, SessionRecordingEvent,
     actors::{RootActor, RootArgs, RootMsg, SessionParams},
 };
 use ractor::Actor;
@@ -80,6 +80,22 @@ impl ListenerRuntime for CliRuntime {
             }
             SessionDataEvent::MicMuted { value, .. } => {
                 eprintln!("[data] mic muted={value}");
+            }
+        }
+    }
+
+    fn emit_recording(&self, event: SessionRecordingEvent) {
+        match event {
+            SessionRecordingEvent::RecordingStateChanged {
+                session_id,
+                state,
+                queue_depth,
+                current_job_session_id,
+                reason,
+            } => {
+                eprintln!(
+                    "[recording] session={session_id:?} state={state:?} queue_depth={queue_depth} current_job={current_job_session_id:?} reason={reason:?}"
+                );
             }
         }
     }

@@ -153,8 +153,10 @@ function HeaderTabTranscript({
     <NoteTab isActive={isActive} onClick={onClick}>
       Transcript
       {showRefreshButton && (
-        <span
+        <button
+          type="button"
           onClick={handleRefreshClick}
+          aria-label="Refresh transcript"
           className={cn([
             "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-xs transition-colors",
             "hover:bg-neutral-200 focus-visible:bg-neutral-200",
@@ -166,7 +168,7 @@ function HeaderTabTranscript({
           ) : (
             <RefreshCwIcon size={12} />
           )}
-        </span>
+        </button>
       )}
     </NoteTab>
   );
@@ -259,8 +261,10 @@ function HeaderTabEnhanced({
   }
 
   const regenerateIcon = (
-    <span
+    <button
+      type="button"
       onClick={handleRegenerateClick}
+      aria-label="Regenerate enhanced note"
       className={cn([
         "group relative inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-xs transition-colors",
         isError
@@ -285,7 +289,7 @@ function HeaderTabEnhanced({
             : "opacity-100",
         ])}
       />
-    </span>
+    </button>
   );
 
   return (
@@ -527,7 +531,7 @@ export function useEditorTabs({
   );
 
   if (sessionMode === "active" || sessionMode === "running_batch") {
-    const tabs: EditorView[] = [{ type: "raw" }, { type: "transcript" }];
+    const tabs: EditorView[] = [{ type: "transcript" }, { type: "raw" }];
     if (hasAttachments) {
       tabs.push({ type: "attachments" });
     }

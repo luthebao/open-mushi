@@ -111,14 +111,14 @@ function ItemBase({
       onShiftClick={onShiftClick}
       contextMenu={hasSelection ? undefined : contextMenu}
       className={cn([
-        "w-full cursor-pointer rounded-lg px-3 py-2 text-left",
-        multiSelected && "bg-neutral-200",
-        !multiSelected && selected && "bg-neutral-200",
+        "w-full cursor-pointer rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left",
+        multiSelected && "border-l-neutral-400 bg-neutral-200",
+        !multiSelected && selected && "border-l-red-500 bg-red-50",
         !multiSelected && !selected && "hover:bg-neutral-100",
         ignored && "opacity-40",
       ])}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {showSpinner && (
           <div className="shrink-0">
             <Spinner size={14} />
@@ -127,14 +127,14 @@ function ItemBase({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div
             className={cn(
-              "pointer-events-none truncate text-sm font-normal",
+              "pointer-events-none truncate text-[13px] font-medium",
               ignored && "line-through",
             )}
           >
             {title || <span className="text-neutral-400">Untitled</span>}
           </div>
           {displayTime && (
-            <div className="text-xs text-neutral-500">{displayTime}</div>
+            <div className="text-[11px] text-neutral-500">{displayTime}</div>
           )}
         </div>
         {calendarId && <CalendarIndicator calendarId={calendarId} />}

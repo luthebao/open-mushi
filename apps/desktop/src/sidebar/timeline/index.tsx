@@ -238,7 +238,7 @@ export function TimelineView() {
                   "bg-neutral-50 py-1 pr-1 pl-3",
                 ])}
               >
-                <div className="text-base font-bold text-neutral-900">
+                <div className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
                   {bucket.label}
                 </div>
               </div>

@@ -62,6 +62,30 @@ async getState() : Promise<Result<State, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getRecordingStatus() : Promise<Result<RecordingStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:listener|get_recording_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearStaleRecordingState() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:listener|clear_stale_recording_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async preflight() : Promise<Result<ListenerPreflightReport, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:listener|preflight") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async isSupportedLanguagesLive(provider: string, model: string | null, languages: string[]) : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:listener|is_supported_languages_live", { provider, model, languages }) };
@@ -95,12 +119,14 @@ export const events = __makeEvents__<{
 sessionDataEvent: SessionDataEvent,
 sessionErrorEvent: SessionErrorEvent,
 sessionLifecycleEvent: SessionLifecycleEvent,
-sessionProgressEvent: SessionProgressEvent
+sessionProgressEvent: SessionProgressEvent,
+sessionRecordingEvent: SessionRecordingEvent
 }>({
 sessionDataEvent: "plugin:listener:session-data-event",
 sessionErrorEvent: "plugin:listener:session-error-event",
 sessionLifecycleEvent: "plugin:listener:session-lifecycle-event",
-sessionProgressEvent: "plugin:listener:session-progress-event"
+sessionProgressEvent: "plugin:listener:session-progress-event",
+sessionRecordingEvent: "plugin:listener:session-recording-event"
 })
 
 /** user-defined constants **/
@@ -110,11 +136,17 @@ sessionProgressEvent: "plugin:listener:session-progress-event"
 /** user-defined types **/
 
 export type DegradedError = { type: "authentication_failed"; provider: string } | { type: "upstream_unavailable"; message: string } | { type: "connection_timeout" } | { type: "stream_error"; message: string }
+export type ListenerPreflightCheck = { key: string; status: ListenerPreflightStatus; message: string }
+export type ListenerPreflightReport = { ok: boolean; checks: ListenerPreflightCheck[] }
+export type ListenerPreflightStatus = "ok" | "warning" | "error"
+export type RecordingState = "idle" | "starting" | "recording" | "stopping" | "queuedForStt" | "transcribing" | "queuedForLlm" | "summarizing" | "completed" | "failed"
+export type RecordingStatus = { state: RecordingState; queueDepth: number; activeSessionId: string | null; currentJobSessionId: string | null; lastError: string | null }
 export type SessionDataEvent = { type: "audio_amplitude"; session_id: string; mic: number; speaker: number } | { type: "mic_muted"; session_id: string; value: boolean } | { type: "stream_response"; session_id: string; response: StreamResponse }
 export type SessionErrorEvent = { type: "audio_error"; session_id: string; error: string; device: string | null; is_fatal: boolean } | { type: "connection_error"; session_id: string; error: string }
 export type SessionLifecycleEvent = { type: "inactive"; session_id: string; error: string | null } | { type: "active"; session_id: string; error?: DegradedError | null } | { type: "finalizing"; session_id: string }
-export type SessionParams = { session_id: string; languages: string[]; onboarding: boolean; record_enabled: boolean; model: string; base_url: string; api_key: string; keywords: string[] }
+export type SessionParams = { session_id: string; languages: string[]; onboarding: boolean; record_enabled: boolean; model: string; base_url: string; api_key: string; keywords: string[]; speaker_model?: string | null; speaker_threshold?: number | null }
 export type SessionProgressEvent = { type: "audio_initializing"; session_id: string } | { type: "audio_ready"; session_id: string; device: string | null } | { type: "connecting"; session_id: string } | { type: "connected"; session_id: string; adapter: string }
+export type SessionRecordingEvent = { type: "recording_state_changed"; session_id: string | null; state: RecordingState; queue_depth: number; current_job_session_id: string | null; reason?: string | null } | { type: "recording_diagnostic"; session_id: string | null; stage: string; queue_depth: number; latency_ms?: number | null; message: string; error?: string | null }
 export type State = "active" | "inactive" | "finalizing"
 export type StreamAlternatives = { transcript: string; words: StreamWord[]; confidence: number; languages?: string[] }
 export type StreamChannel = { alternatives: StreamAlternatives[] }

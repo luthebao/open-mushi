@@ -43,9 +43,18 @@ describe("computeCurrentNoteTab", () => {
       expect(result).toEqual({ type: "enhanced", id: "note-1" });
     });
 
-    it("respects persisted raw view", () => {
+    it("keeps persisted enhanced id when it differs from first enhanced id", () => {
+      const result = computeCurrentNoteTab(
+        { type: "enhanced", id: "note-persisted" },
+        false,
+        "note-first",
+      );
+      expect(result).toEqual({ type: "enhanced", id: "note-persisted" });
+    });
+
+    it("prioritizes enhanced view over persisted raw when summary exists", () => {
       const result = computeCurrentNoteTab({ type: "raw" }, false, "note-1");
-      expect(result).toEqual({ type: "raw" });
+      expect(result).toEqual({ type: "enhanced", id: "note-1" });
     });
 
     it("respects persisted transcript view", () => {
