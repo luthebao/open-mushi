@@ -99,6 +99,9 @@ pnpm -F @openmushi/ui build
 # Preferred (workspace/turbo, from repo root)
 pnpm turbo tauri:dev --filter=@openmushi/desktop
 
+# Automatic env loading (from repo root)
+pnpm tauri:dev:env
+
 # Alternative (inside apps/desktop)
 pnpm tauri:dev
 ```
@@ -112,8 +115,37 @@ pnpm turbo build
 # Preferred desktop bundle build from repo root
 pnpm turbo tauri:build --filter=@openmushi/desktop
 
+# Automatic env loading (from repo root)
+pnpm tauri:build:env
+
 # Alternative (inside apps/desktop)
 pnpm tauri:build
+```
+
+### Environment variables for build/signing
+
+1. Create your local env file from template:
+
+```bash
+cp .env.example .env
+```
+
+1. Generate a Tauri signing key (choose a password you will keep):
+
+```bash
+pnpm -C apps/desktop tauri signer generate -w "$HOME/.openmushi/tauri_signing.key"
+```
+
+1. Set values in `.env`:
+
+- `VITE_API_URL` (required by Rust compile path in release)
+- `TAURI_SIGNING_PRIVATE_KEY_PATH` (path to generated key)
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the password you chose)
+
+1. Build with automatic env loading:
+
+```bash
+pnpm tauri:build:env
 ```
 
 ### Quality checks
@@ -146,7 +178,7 @@ cargo test -p listener-core <test_name>
 Open Mushi downloads STT models on first use:
 
 | Model | Size | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | Whisper Tiny | ~75 MB | Fastest, lower accuracy |
 | Whisper Base | ~142 MB | Balanced |
 | Whisper Small | ~244 MB | Default, best accuracy |

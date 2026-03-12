@@ -44,3 +44,4 @@ apps/desktop/src-tauri/bindings/
 *.dll
 Cargo.lock
 docs/char/**/*
+.turbo/
