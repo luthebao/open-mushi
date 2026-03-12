@@ -2,59 +2,88 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Important Notes
+## Repository Rules (must follow)
 
 - Never use any git commands in this repository.
-- Must follow the plans and design documents in `docs/plans/` for implementation guidance.
-- Always save documents after brainstorming or design work, and reference them in code comments, and save to the appropriate `docs/plans/` file if new design work is done.
-- For any new features or significant changes, update the relevant design documents in `docs/plans/` with detailed explanations, diagrams, and rationale.
-- Always use Github MCP to read the github repo link.
+- Always use GitHub MCP (not guessed URLs) when reading GitHub repo links.
+- Treat `docs/plans/` as the source of truth for implementation sequencing and design decisions.
+- For significant feature/design changes, update the relevant plan/design docs with rationale.
 
-## Project Overview
+## What this codebase is
 
-Omnigraph (open-mushi) is a desktop meeting companion that captures system audio and microphone input, transcribes locally via sherpa-onnx, processes transcripts through an LLM-powered skill system, and visualizes keyword connections via a knowledge graph. Built with Tauri v2 (Rust backend) + React 19 (TypeScript frontend).
+Open Mushi is a **Tauri v2 desktop app** with:
+- Rust backend/plugin runtime (`apps/desktop/src-tauri` + `crates/*` + `plugins/*`)
+- React 19 frontend (`apps/desktop/src`)
+- Local-first meeting pipeline (audio capture → STT → transcript/chat/graph)
 
-**Status:** Design complete with 11 phase plans in `docs/plans/`. Implementation starts at Phase 0.
+Monorepo tooling:
+- pnpm workspaces (`apps/*`, `packages/*`, `plugins/*`)
+- Cargo workspace (`apps/desktop/src-tauri`, `crates/*`, `plugins/*`)
+- Turbo tasks coordinate builds/dev/typecheck across workspaces
 
-## Project Structure
+## Common commands
 
-```sh
-src-tauri/
-  ├── src/           # Tauri entry point, app setup, root supervisor
-  ├── crates/        # Internal Rust library crates (audio, vad, aec, db-core, llm-*, whisper-local, etc.)
-  └── plugins/       # Tauri plugins (db, listener, local-stt, local-llm, settings, permissions, etc.)
-src/
-  ├── routes/        # TanStack Router file-based routes
-  ├── session/       # Session/meeting view (core feature)
-  ├── transcript/    # Transcript processing pipeline + UI
-  ├── chat/          # AI chat panel
-  ├── graph/         # Knowledge graph (React Flow)
-  ├── settings/      # Settings panels (AI providers, general)
-  ├── sidebar/       # Left sidebar (timeline, session list)
-  ├── store/
-  │   ├── tinybase/  # Persisted data schemas
-  │   └── zustand/   # Ephemeral state slices
-  └── services/      # Background services
-```
+Run from repo root unless noted.
 
-## Key Design Documents
+### Setup
+- `pnpm install`
 
-- **Full design:** `docs/plans/2026-02-28-omnigraph-design.md`
-- **Phase plans:** `docs/plans/2026-02-28-phase-{0..10}-*.md`
-- **Project brief:** `docs/BRIEF.md`
+### Frontend/Desktop dev
+- `pnpm -F @openmushi/ui build` (required before desktop build/dev when UI CSS is needed)
+- `pnpm turbo tauri:dev --filter=@openmushi/desktop`
+- Alternative (inside `apps/desktop`): `pnpm tauri:dev`
 
-## Phase Dependencies (Critical Path)
+### Build
+- `pnpm turbo build`
+- `pnpm turbo tauri:build --filter=@openmushi/desktop`
+- Alternative (inside `apps/desktop`): `pnpm tauri:build`
 
-```sh
-Phase 0 (bootstrap) → 1 (SQLite) → 2 (audio) → 3 (STT) → 4 (transcript UI)
-Phase 1 → 5 (workspaces), 6 (skill engine)  [parallel]
-Phase 0 → 7 (LLM) → 8 (summarization, needs 6+7), 9 (graph, needs 4+7) → 10 (polish)
-```
+### Typecheck / Lint / Format
+- `pnpm turbo typecheck`
+- `pnpm lint`
+- `pnpm fmt`
 
-## Conventions
+### Tests
+- Desktop tests: `pnpm -F @openmushi/desktop test`
+- Single test file (Vitest): `pnpm -F @openmushi/desktop test -- src/session/components/note-input/note-tab.test.tsx`
+- Rust workspace tests: `cargo test --workspace`
+- Single Rust crate: `cargo test -p listener-core`
+- Single Rust test name: `cargo test -p listener-core <test_name>`
 
-- **Styling:** Tailwind CSS v4 utility classes only. shadcn/ui new-york style. No custom CSS except for graph canvas.
-- **Routing:** TanStack Router with file-based routes in `src/routes/`.
-- **Rust plugins** expose `PluginExt` extension traits on `tauri::Manager` for Rust-side state access.
-- **Skill files:** `SKILL.md` with YAML frontmatter, parsed by Rust `frontmatter` crate, rendered via `minijinja`.
-- **Reference repo:** [fastrepl/char](https://github.com/fastrepl/char) — copy architecture patterns from here.
+## High-level architecture (big picture)
+
+### 1) App bootstrap and runtime composition
+- Rust app entry: `apps/desktop/src-tauri/src/lib.rs`
+  - Builds the Tauri app, registers a large plugin surface, mounts Specta commands, and wires lifecycle hooks.
+  - Spawns/monitors root supervisor and initializes persistent stores.
+- Frontend entry: `apps/desktop/src/main.tsx`
+  - Composes Router + Query + TinyBase + TinyTick providers.
+  - Initializes plugin globals and routes.
+
+### 2) Audio/transcription pipeline
+- Core actor pipeline: `crates/listener-core/src/actors/*`
+  - Source → listener → recorder/session coordination using Ractor actors.
+- STT adapter bridge: `crates/listener-core/src/actors/listener/adapters.rs`
+  - Routes realtime transcription by provider adapter.
+  - Includes in-process Sherpa path (`sherpa://local`) that bypasses websocket adapters.
+- Local STT plugin surface: `plugins/local-stt/src/*`
+  - Exposes commands and server integration for sherpa-based local transcription.
+
+### 3) Data model and persistence split
+- Persisted app/session state uses TinyBase persisters under `apps/desktop/src/store/tinybase/persister/*`.
+- Ephemeral UI/runtime state uses Zustand slices in `apps/desktop/src/store/zustand/*`.
+- Rust-side storage/database capabilities are exposed through Tauri plugins and crates (`plugins/db2`, `crates/db-*`).
+
+### 4) Frontend feature organization
+- Routing: `apps/desktop/src/routes/*` (TanStack file-based routing).
+- Session UX and transcript editing/live state: `apps/desktop/src/session/*`.
+- Shared workspace packages:
+  - `packages/ui` (design system + Tailwind-generated globals)
+  - `packages/transcript`, `packages/store`, `packages/utils`, etc.
+
+## Important implementation conventions
+
+- Styling is Tailwind CSS v4 utility-first; avoid introducing ad-hoc styling patterns when existing UI package patterns apply.
+- Rust plugins generally expose `PluginExt` traits on `tauri::Manager` for app-state/plugin access.
+- Skill/template content uses frontmatter + minijinja flow (see `crates/frontmatter` and template-related crates/plugins).
+- Prefer extending existing plugin/crate boundaries rather than adding new top-level subsystems.
