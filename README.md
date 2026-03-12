@@ -35,7 +35,7 @@ Built with [Tauri v2](https://tauri.app/) (Rust) + React 19 (TypeScript).
 
 ## Project Structure
 
-```
+```sh
 apps/desktop/         # Tauri desktop application
   src-tauri/          # Rust backend entry point
   src/                # React frontend

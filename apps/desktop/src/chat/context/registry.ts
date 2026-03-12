@@ -53,7 +53,17 @@ const renderers: RendererMap = {
         participantCount === 0 &&
         !eventTitle
       ) {
-        return null;
+        if (entity.source === "tool") {
+          return null;
+        }
+
+        return {
+          key: entity.key,
+          icon: CalendarIcon,
+          label: "Session",
+          tooltip: entity.sessionId,
+          removable: entity.removable,
+        };
       }
       const lines: string[] = [];
       if (sc.title) lines.push(sc.title);
