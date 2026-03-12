@@ -16,6 +16,7 @@ import { cn } from "@openmushi/utils";
 import type { ContextEntity, ContextRef } from "~/chat/context-item";
 import { type ContextChipProps, renderChip } from "~/chat/context/registry";
 import { useSearchEngine } from "~/search/contexts/engine";
+import * as main from "~/store/tinybase/store/main";
 
 function ContextChip({
   chip,
@@ -58,6 +59,57 @@ function ContextChip({
   );
 }
 
+type PickerSession = {
+  id: string;
+  title: string;
+  created_at: number;
+  workspace?: string | null;
+};
+
+export function mapTimelineSessionsForPicker(
+  sessions?: Record<string, { title: string; created_at: string; workspace_id: string }>,
+): PickerSession[] {
+  if (!sessions) {
+    return [];
+  }
+
+  return Object.entries(sessions)
+    .map(([id, row]) => ({
+      id,
+      title: row.title || "Untitled",
+      created_at: Date.parse(row.created_at) || 0,
+      workspace: row.workspace_id || null,
+    }))
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 8);
+}
+
+export function resolveSessionPickerResults({
+  query,
+  searchResults,
+  timelineResults,
+}: {
+  query: string;
+  searchResults: PickerSession[];
+  timelineResults: PickerSession[];
+}): PickerSession[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return timelineResults;
+  }
+
+  if (searchResults.length > 0) {
+    return searchResults;
+  }
+
+  return timelineResults.filter((result) => {
+    const title = result.title.toLowerCase();
+    const workspace = result.workspace?.toLowerCase() ?? "";
+    return title.includes(normalizedQuery) || workspace.includes(normalizedQuery);
+  });
+}
+
 function SessionPicker({
   onSelect,
   onClose,
@@ -66,25 +118,39 @@ function SessionPicker({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<
-    Array<{ id: string; title: string; created_at: number }>
-  >([]);
+  const [results, setResults] = useState<PickerSession[]>([]);
   const { search } = useSearchEngine();
+  const timelineSessions = main.UI.useResultTable(
+    main.QUERIES.timelineSessions,
+    main.STORE_ID,
+  ) as Record<
+    string,
+    { title: string; created_at: string; workspace_id: string }
+  >;
 
   useEffect(() => {
+    const timelineResults = mapTimelineSessionsForPicker(timelineSessions);
+
     search(query, { created_at: undefined }).then((hits) => {
+      const searchResults = hits
+        .filter((h) => h.document.type === "session")
+        .slice(0, 8)
+        .map((h) => ({
+          id: h.document.id,
+          title: h.document.title,
+          created_at: h.document.created_at,
+          workspace: null,
+        }));
+
       setResults(
-        hits
-          .filter((h) => h.document.type === "session")
-          .slice(0, 8)
-          .map((h) => ({
-            id: h.document.id,
-            title: h.document.title,
-            created_at: h.document.created_at,
-          })),
+        resolveSessionPickerResults({
+          query,
+          searchResults,
+          timelineResults,
+        }),
       );
     });
-  }, [query, search]);
+  }, [query, search, timelineSessions]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -112,6 +178,7 @@ function SessionPicker({
             </span>
             <span className="text-[10px] text-neutral-400">
               {new Date(result.created_at).toLocaleDateString()}
+              {result.workspace ? ` · ${result.workspace}` : ""}
             </span>
           </button>
         ))}

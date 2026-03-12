@@ -6,6 +6,29 @@ import type { AppUIMessage } from "~/chat/types";
 import { id } from "~/shared/utils";
 import * as main from "~/store/tinybase/store/main";
 
+export function ensureGroupIdForAction({
+  groupId,
+  createGroup,
+  onGroupCreated,
+  generateId,
+  title,
+}: {
+  groupId: string | undefined;
+  createGroup: (payload: { groupId: string; title: string }) => void;
+  onGroupCreated: (groupId: string) => void;
+  generateId: () => string;
+  title: string;
+}): string {
+  if (groupId) {
+    return groupId;
+  }
+
+  const nextGroupId = generateId();
+  createGroup({ groupId: nextGroupId, title });
+  onGroupCreated(nextGroupId);
+  return nextGroupId;
+}
+
 export function useChatActions({
   groupId,
   onGroupCreated,
@@ -48,13 +71,14 @@ export function useChatActions({
         metadata,
       };
 
-      let currentGroupId = groupId;
-      if (!currentGroupId) {
-        currentGroupId = id();
-        const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
-        createChatGroup({ groupId: currentGroupId, title });
-        onGroupCreated(currentGroupId);
-      }
+      const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+      const currentGroupId = ensureGroupIdForAction({
+        groupId,
+        createGroup: createChatGroup,
+        onGroupCreated,
+        generateId: id,
+        title,
+      });
 
       createChatMessage({
         id: messageId,

@@ -13,6 +13,7 @@ import { commands as templateCommands } from "@openmushi/plugin-template";
 
 import { useChatContextPipeline } from "./use-chat-context-pipeline";
 import { useSessionContextEntity } from "./use-session-context-entity";
+import { ensureGroupIdForAction } from "./use-chat-actions";
 
 import { useLanguageModel } from "~/ai/hooks";
 import type { ContextEntity, ContextRef } from "~/chat/context-item";
@@ -31,6 +32,7 @@ interface ChatSessionProps {
   sessionId: string;
   chatGroupId?: string;
   currentSessionId?: string;
+  onGroupCreated?: (newGroupId: string) => void;
   modelOverride?: LanguageModel;
   extraTools?: ToolSet;
   systemPromptOverride?: string;
@@ -56,6 +58,7 @@ export function ChatSession({
   sessionId,
   chatGroupId,
   currentSessionId,
+  onGroupCreated,
   modelOverride,
   extraTools,
   systemPromptOverride,
@@ -71,12 +74,32 @@ export function ChatSession({
   );
   const persistedRefs = persistedCtx?.contextRefs ?? EMPTY_CONTEXT_REFS;
 
+  const { user_id } = main.UI.useValues(main.STORE_ID);
+
+  const createChatGroup = main.UI.useSetRowCallback(
+    "chat_groups",
+    (p: { groupId: string; title: string }) => p.groupId,
+    (p: { groupId: string; title: string }) => ({
+      user_id,
+      created_at: new Date().toISOString(),
+      title: p.title,
+    }),
+    [user_id],
+    main.STORE_ID,
+  );
+
   const onAddContextEntity = useCallback(
     (ref: ContextRef) => {
-      if (!chatGroupId) return;
-      addRef(chatGroupId, ref);
+      const resolvedGroupId = ensureGroupIdForAction({
+        groupId: chatGroupId,
+        createGroup: createChatGroup,
+        onGroupCreated: onGroupCreated ?? (() => {}),
+        generateId: id,
+        title: "New chat",
+      });
+      addRef(resolvedGroupId, ref);
     },
-    [chatGroupId, addRef],
+    [chatGroupId, addRef, createChatGroup, onGroupCreated],
   );
 
   const { transport, isSystemPromptReady } = useTransport(

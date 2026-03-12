@@ -65,11 +65,11 @@ impl SpeakerIdentifier {
             .ok()?;
 
         // Try to find a matching speaker in the registry.
-        if let Some(name) = self.manager.search(&embedding, self.threshold) {
-            if !name.is_empty() {
-                // Parse the stored name back to the integer speaker ID.
-                return name.parse::<i32>().ok();
-            }
+        if let Some(name) = self.manager.search(&embedding, self.threshold)
+            && !name.is_empty()
+        {
+            // Parse the stored name back to the integer speaker ID.
+            return name.parse::<i32>().ok();
         }
 
         // No match — register as a new speaker.

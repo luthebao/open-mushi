@@ -4,6 +4,10 @@ A desktop meeting companion that captures system audio and microphone input, tra
 
 Built with [Tauri v2](https://tauri.app/) (Rust) + React 19 (TypeScript).
 
+![2D Graph](imgs/graph-2d.png)
+
+![3D Graph](imgs/graph-3d.png)
+
 ## Features
 
 - **Local Speech-to-Text** — On-device transcription using sherpa-onnx (Whisper models) with Silero VAD and speaker diarization

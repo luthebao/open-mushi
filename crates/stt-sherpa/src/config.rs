@@ -25,10 +25,10 @@ impl SherpaEngineConfig {
             }
         }
 
-        if let Some(speaker_path) = &self.speaker_model {
-            if !speaker_path.exists() {
-                return Err(crate::Error::ModelNotFound(speaker_path.clone()));
-            }
+        if let Some(speaker_path) = &self.speaker_model
+            && !speaker_path.exists()
+        {
+            return Err(crate::Error::ModelNotFound(speaker_path.clone()));
         }
 
         Ok(())

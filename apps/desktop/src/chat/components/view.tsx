@@ -61,6 +61,7 @@ export function ChatView() {
         sessionId={stableSessionId}
         chatGroupId={groupId}
         currentSessionId={currentSessionId}
+        onGroupCreated={setGroupId}
       >
         {(sessionProps) => (
           <ChatContent
