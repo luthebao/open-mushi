@@ -141,6 +141,7 @@ pnpm -C apps/desktop tauri signer generate -w "$HOME/.openmushi/tauri_signing.ke
 - `VITE_API_URL` (required by Rust compile path in release)
 - `TAURI_SIGNING_PRIVATE_KEY_PATH` (path to generated key)
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the password you chose)
+- `TAURI_SIGNING_PRIVATE_KEY` (optional; `pnpm tauri:build:env` auto-populates this from `*_PATH` when omitted)
 
 1. Build with automatic env loading:
 
