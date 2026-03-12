@@ -12,8 +12,16 @@ export function NoteTab({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       className={cn([
         "relative my-2 shrink-0 border-b-2 px-1 py-0.5 text-xs font-medium transition-all duration-200",
         isActive
@@ -27,6 +35,6 @@ export function NoteTab({
       ])}
     >
       <span className="flex h-5 items-center gap-1">{children}</span>
-    </button>
+    </div>
   );
 }

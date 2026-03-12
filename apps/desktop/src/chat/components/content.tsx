@@ -10,11 +10,32 @@ import type { ContextEntity, ContextRef } from "~/chat/context-item";
 import type { AppUIMessage } from "~/chat/types";
 
 function toContextRefs(entities: ContextEntity[]): ContextRef[] {
-  return entities.flatMap((e) =>
-    e.kind === "session"
-      ? [{ kind: e.kind, key: e.key, source: e.source, sessionId: e.sessionId }]
-      : [],
-  );
+  return entities.flatMap((e): ContextRef[] => {
+    if (e.kind === "session") {
+      return [{
+        kind: e.kind,
+        key: e.key,
+        source: e.source,
+        sessionId: e.sessionId,
+      }];
+    }
+
+    if (e.kind === "workspace") {
+      return [{
+        kind: e.kind,
+        key: e.key,
+        source: e.source,
+        workspaceId: e.workspaceId,
+        workspaceName: e.workspaceName,
+      }];
+    }
+
+    if (e.kind === "all") {
+      return [{ kind: e.kind, key: e.key, source: e.source }];
+    }
+
+    return [];
+  });
 }
 
 export function ChatContent({

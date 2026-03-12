@@ -18,6 +18,7 @@ import { WorkspaceTree } from "./workspace-tree";
 
 import { useShell } from "~/contexts/shell";
 import { SearchResults } from "~/search/components/sidebar";
+import { getRecordingStatusSummary } from "~/session/components/outer-header/recording-status";
 import { useSearch } from "~/search/contexts/ui";
 import { TrafficLights } from "~/shared/ui/traffic-lights";
 import { useListener } from "~/stt/contexts";
@@ -37,30 +38,17 @@ function RecordingQueueStatus() {
     }),
   );
 
-  const show =
-    state === "queuedForStt" ||
-    state === "transcribing" ||
-    state === "queuedForLlm" ||
-    state === "summarizing";
+  const summary = getRecordingStatusSummary(state, queueDepth);
 
-  if (!show) {
+  if (!summary) {
     return null;
   }
 
-  const stageText =
-    state === "queuedForStt"
-      ? "Queued for transcription"
-      : state === "transcribing"
-        ? "Transcribing"
-        : state === "queuedForLlm"
-          ? "Queued for summary"
-          : "Summarizing";
-
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      <div className="font-medium">Recording pipeline</div>
-      <div className="mt-1">Stage: {stageText}</div>
-      <div>Queue depth: {queueDepth}</div>
+      <div className="font-medium">{summary.title}</div>
+      <div className="mt-1">Stage: {summary.stage}</div>
+      <div>{summary.queue}</div>
       <div>Current job: {currentJobSessionId ?? "none"}</div>
       {diagnostics?.message && <div className="mt-1">{diagnostics.message}</div>}
     </div>

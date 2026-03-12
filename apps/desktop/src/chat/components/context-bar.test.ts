@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   mapTimelineSessionsForPicker,
+  mapTimelineWorkspacesForPicker,
   resolveSessionPickerResults,
+  resolveWorkspacePickerResults,
 } from "./context-bar";
 
 describe("resolveSessionPickerResults", () => {
@@ -13,8 +15,16 @@ describe("resolveSessionPickerResults", () => {
 
   it("returns timeline sessions when query is empty", () => {
     const timeline = mapTimelineSessionsForPicker({
-      s2: { title: "Sprint Retro", created_at: "2026-03-10T08:00:00.000Z", workspace_id: "Eng" },
-      s1: { title: "Roadmap", created_at: "2026-03-12T08:00:00.000Z", workspace_id: "Product" },
+      s2: {
+        title: "Sprint Retro",
+        created_at: "2026-03-10T08:00:00.000Z",
+        workspace_id: "Eng",
+      },
+      s1: {
+        title: "Roadmap",
+        created_at: "2026-03-12T08:00:00.000Z",
+        workspace_id: "Product",
+      },
     });
 
     const results = resolveSessionPickerResults({
@@ -28,7 +38,11 @@ describe("resolveSessionPickerResults", () => {
 
   it("falls back to timeline sessions when search returns no hits", () => {
     const timeline = mapTimelineSessionsForPicker({
-      s1: { title: "Customer call", created_at: "2026-03-12T08:00:00.000Z", workspace_id: "Sales" },
+      s1: {
+        title: "Customer call",
+        created_at: "2026-03-12T08:00:00.000Z",
+        workspace_id: "Sales",
+      },
     });
 
     const results = resolveSessionPickerResults({
@@ -44,8 +58,16 @@ describe("resolveSessionPickerResults", () => {
 
   it("filters timeline fallback by workspace name when searching", () => {
     const timeline = mapTimelineSessionsForPicker({
-      s1: { title: "Roadmap", created_at: "2026-03-12T08:00:00.000Z", workspace_id: "Product" },
-      s2: { title: "Customer call", created_at: "2026-03-11T08:00:00.000Z", workspace_id: "Sales" },
+      s1: {
+        title: "Roadmap",
+        created_at: "2026-03-12T08:00:00.000Z",
+        workspace_id: "Product",
+      },
+      s2: {
+        title: "Customer call",
+        created_at: "2026-03-11T08:00:00.000Z",
+        workspace_id: "Sales",
+      },
     });
 
     const results = resolveSessionPickerResults({
@@ -57,5 +79,59 @@ describe("resolveSessionPickerResults", () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.id).toBe("s2");
     expect(results[0]?.workspace).toBe("Sales");
+  });
+});
+
+describe("resolveWorkspacePickerResults", () => {
+  it("maps unique workspaces from timeline sessions", () => {
+    const workspaces = mapTimelineWorkspacesForPicker({
+      s1: {
+        title: "A",
+        created_at: "2026-03-12T08:00:00.000Z",
+        workspace_id: "eng/core",
+      },
+      s2: {
+        title: "B",
+        created_at: "2026-03-11T08:00:00.000Z",
+        workspace_id: "eng/core",
+      },
+      s3: {
+        title: "C",
+        created_at: "2026-03-10T08:00:00.000Z",
+        workspace_id: "sales/field",
+      },
+    });
+
+    expect(workspaces.map((w) => w.id)).toEqual(["eng/core", "sales/field"]);
+    expect(workspaces.map((w) => w.name)).toEqual(["core", "field"]);
+  });
+
+  it("returns all workspaces when query is empty", () => {
+    const workspaces = [
+      { id: "eng/core", name: "core" },
+      { id: "sales/field", name: "field" },
+    ];
+
+    const results = resolveWorkspacePickerResults({
+      query: "",
+      workspaceResults: workspaces,
+    });
+
+    expect(results).toEqual(workspaces);
+  });
+
+  it("filters workspace results by id and name", () => {
+    const workspaces = [
+      { id: "eng/core", name: "core" },
+      { id: "sales/field", name: "field" },
+    ];
+
+    expect(
+      resolveWorkspacePickerResults({ query: "core", workspaceResults: workspaces }),
+    ).toEqual([{ id: "eng/core", name: "core" }]);
+
+    expect(
+      resolveWorkspacePickerResults({ query: "sales", workspaceResults: workspaces }),
+    ).toEqual([{ id: "sales/field", name: "field" }]);
   });
 });

@@ -24,4 +24,31 @@ describe("renderChip", () => {
     expect(chip).not.toBeNull();
     expect(chip?.label).toBe("Session");
   });
+
+  it("renders workspace chip using workspace name", () => {
+    const chip = renderChip({
+      kind: "workspace",
+      key: "workspace:manual:eng/core",
+      workspaceId: "eng/core",
+      workspaceName: "core",
+      source: "manual",
+      removable: true,
+    });
+
+    expect(chip).not.toBeNull();
+    expect(chip?.label).toBe("core");
+    expect(chip?.removable).toBe(true);
+  });
+
+  it("renders all-scope chip", () => {
+    const chip = renderChip({
+      kind: "all",
+      key: "all:manual",
+      source: "manual",
+      removable: true,
+    });
+
+    expect(chip).not.toBeNull();
+    expect(chip?.label).toBe("All notes");
+  });
 });

@@ -21,6 +21,67 @@ type UseChatContextPipelineParams = {
   store: ReturnType<typeof main.UI.useStore>;
 };
 
+type WorkspaceEntity = Extract<ContextEntity, { kind: "workspace" }>;
+type AllEntity = Extract<ContextEntity, { kind: "all" }>;
+
+
+function mapWorkspaceEntity(ref: Extract<ContextRef, { kind: "workspace" }>): WorkspaceEntity {
+  return {
+    ...ref,
+    removable: ref.source !== "auto-current",
+  };
+}
+
+function mapAllEntity(ref: Extract<ContextRef, { kind: "all" }>): AllEntity {
+  return {
+    ...ref,
+    removable: ref.source !== "auto-current",
+  };
+}
+
+export function toPersistableContextRefs(
+  contextEntities: ContextEntity[],
+): ContextRef[] {
+  return contextEntities
+    .filter((e) => e.source !== "tool" && e.key !== CURRENT_SESSION_CONTEXT_KEY)
+    .flatMap((e): ContextRef[] => {
+      if (e.kind === "session") {
+        return [
+          {
+            kind: "session",
+            key: e.key,
+            source: e.source,
+            sessionId: e.sessionId,
+          },
+        ];
+      }
+
+      if (e.kind === "workspace") {
+        return [
+          {
+            kind: "workspace",
+            key: e.key,
+            source: e.source,
+            workspaceId: e.workspaceId,
+            workspaceName: e.workspaceName,
+          },
+        ];
+      }
+
+      if (e.kind === "all") {
+        return [
+          {
+            kind: "all",
+            key: e.key,
+            source: e.source,
+          },
+        ];
+      }
+
+      return [];
+    });
+}
+
 export function useChatContextPipeline({
   sessionId,
   chatGroupId,
@@ -66,7 +127,10 @@ export function useChatContextPipeline({
 
   useEffect(() => {
     const toHydrate = persistedRefs.filter(
-      (ref) => !liveKeys.has(ref.key) && !hydratedEntities[ref.key],
+      (ref): ref is Extract<ContextRef, { kind: "session" }> =>
+        ref.kind === "session" &&
+        !liveKeys.has(ref.key) &&
+        !hydratedEntities[ref.key],
     );
     if (!store || toHydrate.length === 0) return;
 
@@ -93,16 +157,25 @@ export function useChatContextPipeline({
   }, [persistedRefs, liveKeys, hydratedEntities, store]);
 
   const contextEntities = useMemo(() => {
-    const sessionEntities: ContextEntity[] = sessionEntity
-      ? [sessionEntity]
-      : [];
+    const sessionEntities: ContextEntity[] = sessionEntity ? [sessionEntity] : [];
+
     const hydrated: ContextEntity[] = persistedRefs
       .filter((ref) => !liveKeys.has(ref.key))
-      .map((ref) => hydratedEntities[ref.key] ?? { ...ref, removable: true });
+      .map((ref) => {
+        if (ref.kind === "session") {
+          return hydratedEntities[ref.key] ?? { ...ref, removable: true };
+        }
+        if (ref.kind === "workspace") {
+          return mapWorkspaceEntity(ref);
+        }
+        return mapAllEntity(ref);
+      });
 
-    return dedupeByKey([sessionEntities, toolEntities, hydrated]).filter(
-      (e) => !removedKeys.has(e.key),
-    );
+    return dedupeByKey([
+      sessionEntities,
+      toolEntities,
+      hydrated,
+    ]).filter((e) => !removedKeys.has(e.key));
   }, [
     sessionEntity,
     toolEntities,
@@ -121,21 +194,7 @@ export function useChatContextPipeline({
       return;
     }
 
-    const persistable = contextEntities
-      .filter(
-        (e): e is Extract<ContextEntity, { kind: "session" }> =>
-          e.kind === "session" &&
-          e.source !== "tool" &&
-          e.key !== CURRENT_SESSION_CONTEXT_KEY,
-      )
-      .map(
-        (e): ContextRef => ({
-          kind: e.kind,
-          key: e.key,
-          source: e.source,
-          sessionId: e.sessionId,
-        }),
-      );
+    const persistable = toPersistableContextRefs(contextEntities);
 
     const fingerprint = JSON.stringify(persistable);
     if (fingerprint === lastPersisted.current) return;

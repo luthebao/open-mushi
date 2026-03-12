@@ -19,7 +19,11 @@ import { useLanguageModel } from "~/ai/hooks";
 import type { ContextEntity, ContextRef } from "~/chat/context-item";
 import { useCreateChatMessage } from "~/chat/hooks/useCreateChatMessage";
 import { hydrateSessionContextFromFs } from "~/chat/session-context-hydrator";
-import { CustomChatTransport } from "~/chat/transport";
+import {
+  CustomChatTransport,
+  expandContextRefsForPrompt,
+  MAX_EXPANDED_CONTEXTS,
+} from "~/chat/transport";
 import type { AppUIMessage } from "~/chat/types";
 import { useToolRegistry } from "~/contexts/tool";
 import { id } from "~/shared/utils";
@@ -316,10 +320,37 @@ function useTransport(
       tools,
       effectiveSystemPrompt,
       async (ref) => {
-        if (ref.kind !== "session" || !store) {
+        if (!store) {
           return null;
         }
         return hydrateSessionContextFromFs(store, ref.sessionId);
+      },
+      async (refs) => {
+        if (!store) {
+          return refs;
+        }
+
+        const sessionRows = store
+          .getRowIds("sessions")
+          .map((sessionId) => {
+            const row = store.getRow("sessions", sessionId) as {
+              created_at?: string;
+              workspace_id?: string;
+            };
+
+            return {
+              id: sessionId,
+              created_at: Date.parse(row?.created_at ?? "") || 0,
+              workspace_id: row?.workspace_id || "",
+            };
+          })
+          .sort((a, b) => b.created_at - a.created_at);
+
+        return expandContextRefsForPrompt({
+          refs,
+          sessionRows,
+          cap: MAX_EXPANDED_CONTEXTS,
+        });
       },
     );
   }, [model, tools, effectiveSystemPrompt, store]);

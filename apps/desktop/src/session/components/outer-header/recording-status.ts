@@ -38,3 +38,36 @@ export function getRecordingStatusChipTone(state: RecordingState): ChipTone {
   if (state === "failed") return "error";
   return "neutral";
 }
+
+export function getRecordingStatusSummary(
+  state: RecordingState,
+  queueDepth: number,
+): {
+  title: string;
+  stage: string;
+  queue: string;
+} | null {
+  if (
+    state !== "queuedForStt" &&
+    state !== "transcribing" &&
+    state !== "queuedForLlm" &&
+    state !== "summarizing"
+  ) {
+    return null;
+  }
+
+  const stage =
+    state === "queuedForStt"
+      ? "Queued for transcription"
+      : state === "transcribing"
+        ? "Transcribing"
+        : state === "queuedForLlm"
+          ? "Queued for summary"
+          : "Summarizing";
+
+  return {
+    title: "Recording pipeline",
+    stage,
+    queue: `Queue depth: ${queueDepth}`,
+  };
+}

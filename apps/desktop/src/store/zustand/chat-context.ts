@@ -32,13 +32,31 @@ export const useChatContext = create<ChatContextState & ChatContextActions>(
     },
     addRef: (groupId, ref) => {
       const current = get().contexts[groupId]?.contextRefs ?? [];
-      if (current.some((v) => v.key === ref.key)) {
+
+      const isManualScopeRef =
+        ref.source === "manual" &&
+        (ref.kind === "session" || ref.kind === "workspace" || ref.kind === "all");
+
+      const base = isManualScopeRef
+        ? current.filter(
+            (item) =>
+              !(
+                item.source === "manual" &&
+                (item.kind === "session" ||
+                  item.kind === "workspace" ||
+                  item.kind === "all")
+              ),
+          )
+        : current;
+
+      if (base.some((v) => v.key === ref.key)) {
         return;
       }
+
       set({
         contexts: {
           ...get().contexts,
-          [groupId]: { contextRefs: [...current, ref] },
+          [groupId]: { contextRefs: [...base, ref] },
         },
       });
     },

@@ -1,4 +1,10 @@
-import { CalendarIcon, MonitorIcon, SearchIcon, UserIcon } from "lucide-react";
+import {
+  CalendarIcon,
+  FolderIcon,
+  MonitorIcon,
+  SearchIcon,
+  UserIcon,
+} from "lucide-react";
 
 import type { ContextEntity, ContextEntityKind } from "~/chat/context-item";
 
@@ -93,6 +99,26 @@ const renderers: RendererMap = {
         removable: entity.removable,
       };
     },
+  },
+
+  workspace: {
+    toChip: (entity) => ({
+      key: entity.key,
+      icon: FolderIcon,
+      label: entity.workspaceName || entity.workspaceId,
+      tooltip: entity.workspaceId,
+      removable: entity.removable,
+    }),
+  },
+
+  all: {
+    toChip: (entity) => ({
+      key: entity.key,
+      icon: FolderIcon,
+      label: "All notes",
+      tooltip: "All notes",
+      removable: entity.removable,
+    }),
   },
 
   account: {

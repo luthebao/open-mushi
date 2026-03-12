@@ -19,18 +19,34 @@ import { isRecord } from "./utils";
 const MAX_TOOL_STEPS = 5;
 const MESSAGE_WINDOW_THRESHOLD = 20;
 const MESSAGE_WINDOW_SIZE = 10;
+export const MAX_EXPANDED_CONTEXTS = 8;
 
 function isContextRef(value: unknown): value is ContextRef {
-  return (
-    isRecord(value) &&
-    value.kind === "session" &&
-    typeof value.key === "string" &&
-    typeof value.sessionId === "string" &&
-    (value.source === undefined ||
-      value.source === "tool" ||
-      value.source === "manual" ||
-      value.source === "auto-current")
-  );
+  if (!isRecord(value) || typeof value.key !== "string") {
+    return false;
+  }
+
+  if (
+    value.source !== undefined &&
+    value.source !== "tool" &&
+    value.source !== "manual" &&
+    value.source !== "auto-current"
+  ) {
+    return false;
+  }
+
+  if (value.kind === "session") {
+    return typeof value.sessionId === "string";
+  }
+
+  if (value.kind === "workspace") {
+    return (
+      typeof value.workspaceId === "string" &&
+      (value.workspaceName === undefined || typeof value.workspaceName === "string")
+    );
+  }
+
+  return value.kind === "all";
 }
 
 function getContextRefs(metadata: unknown): ContextRef[] {
@@ -43,14 +59,64 @@ function getContextRefs(metadata: unknown): ContextRef[] {
   );
 }
 
+export function expandContextRefsForPrompt({
+  refs,
+  sessionRows,
+  cap = MAX_EXPANDED_CONTEXTS,
+}: {
+  refs: ContextRef[];
+  sessionRows: Array<{ id: string; created_at: number; workspace_id: string }>;
+  cap?: number;
+}): Array<Extract<ContextRef, { kind: "session" }>> {
+  const orderedRows = [...sessionRows].sort((a, b) => b.created_at - a.created_at);
+  const expanded: Array<Extract<ContextRef, { kind: "session" }>> = [];
+  const seen = new Set<string>();
+
+  const pushSession = (sessionId: string) => {
+    if (seen.has(sessionId)) return;
+    seen.add(sessionId);
+    expanded.push({
+      kind: "session",
+      key: `session:expanded:${sessionId}`,
+      source: "manual",
+      sessionId,
+    });
+  };
+
+  for (const ref of refs) {
+    if (ref.kind === "session") {
+      pushSession(ref.sessionId);
+    } else if (ref.kind === "workspace") {
+      for (const row of orderedRows) {
+        if (row.workspace_id === ref.workspaceId) {
+          pushSession(row.id);
+          if (expanded.length >= cap) break;
+        }
+      }
+    } else {
+      for (const row of orderedRows) {
+        pushSession(row.id);
+        if (expanded.length >= cap) break;
+      }
+    }
+
+    if (expanded.length >= cap) {
+      break;
+    }
+  }
+
+  return expanded;
+}
+
 export class CustomChatTransport implements ChatTransport<AppUIMessage> {
   constructor(
     private model: LanguageModel,
     private tools: ToolSet,
     private systemPrompt?: string,
     private resolveContextRef?: (
-      ref: ContextRef,
+      ref: Extract<ContextRef, { kind: "session" }>,
     ) => Promise<SessionContext | null>,
+    private expandContextRefs?: (refs: ContextRef[]) => Promise<ContextRef[]>,
   ) {}
 
   private async renderContextBlock(
@@ -63,6 +129,10 @@ export class CustomChatTransport implements ChatTransport<AppUIMessage> {
     const seen = new Set<string>();
     const contexts: SessionContext[] = [];
     for (const ref of contextRefs) {
+      if (ref.kind !== "session") {
+        continue;
+      }
+
       if (seen.has(ref.key)) {
         continue;
       }
@@ -71,6 +141,10 @@ export class CustomChatTransport implements ChatTransport<AppUIMessage> {
       const context = await this.resolveContextRef(ref);
       if (context) {
         contexts.push(context);
+      }
+
+      if (contexts.length >= MAX_EXPANDED_CONTEXTS) {
+        break;
       }
     }
 
@@ -115,10 +189,14 @@ export class CustomChatTransport implements ChatTransport<AppUIMessage> {
         continue;
       }
 
-      const cacheKey = JSON.stringify(contextRefs);
+      const expandedContextRefs = this.expandContextRefs
+        ? await this.expandContextRefs(contextRefs)
+        : contextRefs;
+
+      const cacheKey = JSON.stringify(expandedContextRefs);
       let contextBlock = contextBlockCache.get(cacheKey);
       if (contextBlock === undefined) {
-        contextBlock = await this.renderContextBlock(contextRefs);
+        contextBlock = await this.renderContextBlock(expandedContextRefs);
         contextBlockCache.set(cacheKey, contextBlock);
       }
 

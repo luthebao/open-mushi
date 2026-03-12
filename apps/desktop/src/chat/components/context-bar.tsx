@@ -1,6 +1,21 @@
-import { ChevronUpIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ChevronUpIcon,
+  FolderIcon,
+  GlobeIcon,
+  PlusIcon,
+  StickyNoteIcon,
+  XIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@openmushi/ui/components/ui/command";
 import {
   Popover,
   PopoverContent,
@@ -66,6 +81,11 @@ type PickerSession = {
   workspace?: string | null;
 };
 
+type PickerWorkspace = {
+  id: string;
+  name: string;
+};
+
 export function mapTimelineSessionsForPicker(
   sessions?: Record<string, { title: string; created_at: string; workspace_id: string }>,
 ): PickerSession[] {
@@ -110,7 +130,49 @@ export function resolveSessionPickerResults({
   });
 }
 
-function SessionPicker({
+export function mapTimelineWorkspacesForPicker(
+  sessions?: Record<string, { title: string; created_at: string; workspace_id: string }>,
+): PickerWorkspace[] {
+  if (!sessions) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const workspaces: PickerWorkspace[] = [];
+
+  for (const row of Object.values(sessions)) {
+    const workspaceId = row.workspace_id || "";
+    if (!workspaceId || seen.has(workspaceId)) continue;
+
+    seen.add(workspaceId);
+    const parts = workspaceId.split("/");
+    const name = parts[parts.length - 1] || workspaceId;
+    workspaces.push({ id: workspaceId, name });
+  }
+
+  return workspaces.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function resolveWorkspacePickerResults({
+  query,
+  workspaceResults,
+}: {
+  query: string;
+  workspaceResults: PickerWorkspace[];
+}): PickerWorkspace[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return workspaceResults;
+  }
+
+  return workspaceResults.filter((workspace) => {
+    const id = workspace.id.toLowerCase();
+    const name = workspace.name.toLowerCase();
+    return id.includes(normalizedQuery) || name.includes(normalizedQuery);
+  });
+}
+
+function NoteScopePicker({
   onSelect,
   onClose,
 }: {
@@ -159,7 +221,7 @@ function SessionPicker({
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search sessions..."
+        placeholder="Search notes..."
         className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-400"
       />
       <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
@@ -183,11 +245,136 @@ function SessionPicker({
           </button>
         ))}
         {results.length === 0 && (
-          <span className="px-2 py-1.5 text-xs text-neutral-400">
-            No sessions found
-          </span>
+          <span className="px-2 py-1.5 text-xs text-neutral-400">No notes found</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function WorkspaceScopePicker({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (workspace: PickerWorkspace) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const timelineSessions = main.UI.useResultTable(
+    main.QUERIES.timelineSessions,
+    main.STORE_ID,
+  ) as Record<
+    string,
+    { title: string; created_at: string; workspace_id: string }
+  >;
+
+  const results = useMemo(() => {
+    const workspaceResults = mapTimelineWorkspacesForPicker(timelineSessions);
+    return resolveWorkspacePickerResults({ query, workspaceResults });
+  }, [query, timelineSessions]);
+
+  return (
+    <Command>
+      <CommandInput
+        autoFocus
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search workspaces..."
+        className="h-9"
+      />
+      <CommandList>
+        <CommandEmpty>No workspaces found.</CommandEmpty>
+        <CommandGroup>
+          {results.map((workspace) => (
+            <CommandItem
+              key={workspace.id}
+              value={workspace.name}
+              onSelect={() => {
+                onSelect(workspace);
+                onClose();
+              }}
+            >
+              <FolderIcon className="size-4" />
+              {workspace.name}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
+}
+
+function ScopePicker({
+  onSelectNote,
+  onSelectWorkspace,
+  onSelectAll,
+  onClose,
+}: {
+  onSelectNote: (sessionId: string) => void;
+  onSelectWorkspace: (workspace: PickerWorkspace) => void;
+  onSelectAll: () => void;
+  onClose: () => void;
+}) {
+  const [scope, setScope] = useState<"note" | "workspace" | "all">("note");
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex rounded-lg border border-neutral-200 bg-neutral-50 p-0.5">
+        <button
+          type="button"
+          onClick={() => setScope("note")}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs",
+            scope === "note" ? "bg-white text-neutral-900" : "text-neutral-500",
+          )}
+        >
+          <StickyNoteIcon className="size-3.5" />
+          Note
+        </button>
+        <button
+          type="button"
+          onClick={() => setScope("workspace")}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs",
+            scope === "workspace"
+              ? "bg-white text-neutral-900"
+              : "text-neutral-500",
+          )}
+        >
+          <FolderIcon className="size-3.5" />
+          Workspace
+        </button>
+        <button
+          type="button"
+          onClick={() => setScope("all")}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs",
+            scope === "all" ? "bg-white text-neutral-900" : "text-neutral-500",
+          )}
+        >
+          <GlobeIcon className="size-3.5" />
+          All notes
+        </button>
+      </div>
+
+      {scope === "note" ? (
+        <NoteScopePicker onSelect={onSelectNote} onClose={onClose} />
+      ) : null}
+      {scope === "workspace" ? (
+        <WorkspaceScopePicker onSelect={onSelectWorkspace} onClose={onClose} />
+      ) : null}
+      {scope === "all" ? (
+        <button
+          type="button"
+          className="rounded-md border border-neutral-200 px-2.5 py-2 text-left text-xs text-neutral-700 hover:bg-neutral-50"
+          onClick={() => {
+            onSelectAll();
+            onClose();
+          }}
+        >
+          Attach all notes
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -272,13 +459,33 @@ export function ContextBar({
   const hasOverflow = visibleCount < chips.length;
   const displayChips = chips.slice(0, visibleCount);
 
-  const handleSelectSession = async (sessionId: string) => {
+  const handleSelectSession = (sessionId: string) => {
     if (!onAddEntity) return;
     onAddEntity({
       kind: "session",
       key: `session:manual:${sessionId}`,
       source: "manual",
       sessionId,
+    });
+  };
+
+  const handleSelectWorkspace = (workspace: PickerWorkspace) => {
+    if (!onAddEntity) return;
+    onAddEntity({
+      kind: "workspace",
+      key: `workspace:manual:${workspace.id}`,
+      source: "manual",
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!onAddEntity) return;
+    onAddEntity({
+      kind: "all",
+      key: "all:manual",
+      source: "manual",
     });
   };
 
@@ -334,9 +541,11 @@ export function ContextBar({
                 <PlusIcon className="size-3.5" />
               </button>
             </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-64 p-3">
-              <SessionPicker
-                onSelect={handleSelectSession}
+            <PopoverContent side="top" align="start" className="w-72 p-3">
+              <ScopePicker
+                onSelectNote={handleSelectSession}
+                onSelectWorkspace={handleSelectWorkspace}
+                onSelectAll={handleSelectAll}
                 onClose={() => setPickerOpen(false)}
               />
             </PopoverContent>

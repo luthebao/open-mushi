@@ -8,16 +8,35 @@ export const CURRENT_SESSION_CONTEXT_KEY = "session:current";
 
 export type ContextEntitySource = "tool" | "manual" | "auto-current";
 
-export type ContextRef = {
-  kind: "session";
-  key: string;
-  source?: ContextEntitySource;
-  sessionId: string;
-};
+export type ContextRef =
+  | {
+      kind: "session";
+      key: string;
+      source?: ContextEntitySource;
+      sessionId: string;
+    }
+  | {
+      kind: "workspace";
+      key: string;
+      source?: ContextEntitySource;
+      workspaceId: string;
+      workspaceName?: string;
+    }
+  | {
+      kind: "all";
+      key: string;
+      source?: ContextEntitySource;
+    };
 
 export type ContextEntity =
-  | (ContextRef & {
+  | (Extract<ContextRef, { kind: "session" }> & {
       sessionContext?: SessionContext;
+      removable?: boolean;
+    })
+  | (Extract<ContextRef, { kind: "workspace" }> & {
+      removable?: boolean;
+    })
+  | (Extract<ContextRef, { kind: "all" }> & {
       removable?: boolean;
     })
   | ({
@@ -30,7 +49,6 @@ export type ContextEntity =
       key: string;
       source?: ContextEntitySource;
     } & Partial<DeviceInfo>);
-
 export type ContextEntityKind = ContextEntity["kind"];
 
 export function dedupeByKey<T extends { key: string }>(groups: T[][]): T[] {
