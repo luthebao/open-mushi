@@ -52,9 +52,9 @@ describe("computeCurrentNoteTab", () => {
       expect(result).toEqual({ type: "enhanced", id: "note-persisted" });
     });
 
-    it("prioritizes enhanced view over persisted raw when summary exists", () => {
+    it("respects persisted raw view when summary exists", () => {
       const result = computeCurrentNoteTab({ type: "raw" }, false, "note-1");
-      expect(result).toEqual({ type: "enhanced", id: "note-1" });
+      expect(result).toEqual({ type: "raw" });
     });
 
     it("respects persisted transcript view", () => {

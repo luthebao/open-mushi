@@ -16,12 +16,12 @@ export function computeCurrentNoteTab(
     return tabView;
   }
 
-  if (firstEnhancedNoteId) {
-    return { type: "enhanced", id: firstEnhancedNoteId };
-  }
-
   if (tabView) {
     return tabView;
+  }
+
+  if (firstEnhancedNoteId) {
+    return { type: "enhanced", id: firstEnhancedNoteId };
   }
 
   return { type: "raw" };
