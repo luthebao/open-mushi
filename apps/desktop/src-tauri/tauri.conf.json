@@ -40,7 +40,11 @@
     },
     "macOS": {
       "minimumSystemVersion": "14.2",
-      "frameworks": [],
+      "frameworks": [
+        "target/release/libonnxruntime.1.17.1.dylib",
+        "target/release/libonnxruntime.dylib",
+        "target/release/libsherpa-onnx-c-api.dylib"
+      ],
       "entitlements": "./Entitlements.plist",
       "dmg": {
         "background": "assets/dmg-background-stable.png",

@@ -20,9 +20,9 @@ case "$OS" in
       exit 0
     fi
 
-    APP_BUNDLE=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 1 | head -n 1)
+    APP_BUNDLE=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" | head -n 1)
     if [ -z "$APP_BUNDLE" ]; then
-      echo "[fix-dylib] No .app bundle found, skipping."
+      echo "[fix-dylib] No .app bundle found in: $BUNDLE_DIR"
       exit 0
     fi
 
