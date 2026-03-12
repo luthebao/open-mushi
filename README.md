@@ -84,18 +84,61 @@ packages/             # Shared TypeScript packages
 
 ## Getting Started
 
-```bash
-# Install dependencies
-pnpm install
+### Setup
 
-# Build the UI package first (required before desktop build)
+```bash
+pnpm install
+```
+
+### Development (desktop)
+
+```bash
+# Build shared UI package first when desktop CSS/assets are needed
 pnpm -F @openmushi/ui build
 
-# Run in development mode
-cd apps/desktop && pnpm tauri dev
+# Preferred (workspace/turbo, from repo root)
+pnpm turbo tauri:dev --filter=@openmushi/desktop
 
-# Build for production
-cd apps/desktop && pnpm tauri build
+# Alternative (inside apps/desktop)
+pnpm tauri:dev
+```
+
+### Production build (desktop)
+
+```bash
+# Full workspace build
+pnpm turbo build
+
+# Preferred desktop bundle build from repo root
+pnpm turbo tauri:build --filter=@openmushi/desktop
+
+# Alternative (inside apps/desktop)
+pnpm tauri:build
+```
+
+### Quality checks
+
+```bash
+pnpm turbo typecheck
+pnpm lint
+pnpm fmt
+```
+
+### Tests
+
+```bash
+# Desktop tests
+pnpm -F @openmushi/desktop test
+
+# Single Vitest file
+pnpm -F @openmushi/desktop test -- src/session/components/note-input/note-tab.test.tsx
+
+# Rust workspace tests
+cargo test --workspace
+
+# Single Rust crate / single Rust test name
+cargo test -p listener-core
+cargo test -p listener-core <test_name>
 ```
 
 ## STT Models

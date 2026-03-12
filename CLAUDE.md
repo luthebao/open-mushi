@@ -9,77 +9,100 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Treat `docs/plans/` as the source of truth for implementation sequencing and design decisions.
 - For significant feature/design changes, update the relevant plan/design docs with rationale.
 
+## Environment assumptions
+
+- Node.js `>=22` (from root `package.json` engines)
+- pnpm `10.30.0` (from root `packageManager`)
+- Rust toolchain `1.93.0` with `rust-analyzer`, `rustfmt`, `clippy` (from `rust-toolchain.toml`)
+- macOS is the primary target (CoreAudio / desktop platform assumptions)
+
 ## What this codebase is
 
 Open Mushi is a **Tauri v2 desktop app** with:
+
 - Rust backend/plugin runtime (`apps/desktop/src-tauri` + `crates/*` + `plugins/*`)
 - React 19 frontend (`apps/desktop/src`)
 - Local-first meeting pipeline (audio capture → STT → transcript/chat/graph)
 
 Monorepo tooling:
+
 - pnpm workspaces (`apps/*`, `packages/*`, `plugins/*`)
 - Cargo workspace (`apps/desktop/src-tauri`, `crates/*`, `plugins/*`)
 - Turbo tasks coordinate builds/dev/typecheck across workspaces
 
-## Common commands
+## Canonical commands
 
 Run from repo root unless noted.
 
 ### Setup
+
 - `pnpm install`
 
-### Frontend/Desktop dev
-- `pnpm -F @openmushi/ui build` (required before desktop build/dev when UI CSS is needed)
-- `pnpm turbo tauri:dev --filter=@openmushi/desktop`
+### Dev mode (desktop)
+
+- Build shared UI package first when desktop CSS/assets are needed: `pnpm -F @openmushi/ui build`
+- Preferred (workspace/turbo): `pnpm turbo tauri:dev --filter=@openmushi/desktop`
 - Alternative (inside `apps/desktop`): `pnpm tauri:dev`
 
-### Build
-- `pnpm turbo build`
-- `pnpm turbo tauri:build --filter=@openmushi/desktop`
+### Production build (desktop)
+
+- Full workspace build: `pnpm turbo build`
+- Preferred desktop bundle build from root: `pnpm turbo tauri:build --filter=@openmushi/desktop`
 - Alternative (inside `apps/desktop`): `pnpm tauri:build`
 
 ### Typecheck / Lint / Format
-- `pnpm turbo typecheck`
-- `pnpm lint`
-- `pnpm fmt`
+
+- Typecheck workspace tasks: `pnpm turbo typecheck`
+- Lint: `pnpm lint`
+- Format: `pnpm fmt`
 
 ### Tests
+
 - Desktop tests: `pnpm -F @openmushi/desktop test`
-- Single test file (Vitest): `pnpm -F @openmushi/desktop test -- src/session/components/note-input/note-tab.test.tsx`
+- Single Vitest file: `pnpm -F @openmushi/desktop test -- src/session/components/note-input/note-tab.test.tsx`
 - Rust workspace tests: `cargo test --workspace`
 - Single Rust crate: `cargo test -p listener-core`
 - Single Rust test name: `cargo test -p listener-core <test_name>`
 
-## High-level architecture (big picture)
+## Architecture map (where to change code)
 
 ### 1) App bootstrap and runtime composition
+
 - Rust app entry: `apps/desktop/src-tauri/src/lib.rs`
-  - Builds the Tauri app, registers a large plugin surface, mounts Specta commands, and wires lifecycle hooks.
-  - Spawns/monitors root supervisor and initializes persistent stores.
+  - Tauri builder, plugin registration, Specta command mounting, lifecycle hooks.
+  - Supervisor/store initialization lives here.
 - Frontend entry: `apps/desktop/src/main.tsx`
-  - Composes Router + Query + TinyBase + TinyTick providers.
-  - Initializes plugin globals and routes.
+  - Router + Query + TinyBase + TinyTick provider composition.
+  - Frontend boot/runtime wiring starts here.
 
 ### 2) Audio/transcription pipeline
-- Core actor pipeline: `crates/listener-core/src/actors/*`
-  - Source → listener → recorder/session coordination using Ractor actors.
-- STT adapter bridge: `crates/listener-core/src/actors/listener/adapters.rs`
-  - Routes realtime transcription by provider adapter.
-  - Includes in-process Sherpa path (`sherpa://local`) that bypasses websocket adapters.
-- Local STT plugin surface: `plugins/local-stt/src/*`
-  - Exposes commands and server integration for sherpa-based local transcription.
 
-### 3) Data model and persistence split
-- Persisted app/session state uses TinyBase persisters under `apps/desktop/src/store/tinybase/persister/*`.
-- Ephemeral UI/runtime state uses Zustand slices in `apps/desktop/src/store/zustand/*`.
-- Rust-side storage/database capabilities are exposed through Tauri plugins and crates (`plugins/db2`, `crates/db-*`).
+- Actor pipeline core: `crates/listener-core/src/actors/*`
+  - Listener/recorder/session coordination.
+- Realtime adapter routing: `crates/listener-core/src/actors/listener/adapters.rs`
+  - Provider routing and Sherpa in-process path (`sherpa://local`).
+- Local STT plugin surface: `plugins/local-stt/src/*`
+  - Command/server integration for sherpa-based transcription.
+
+### 3) Persisted vs ephemeral state split
+
+- Persisted state: TinyBase persisters under `apps/desktop/src/store/tinybase/persister/*`
+- Ephemeral runtime/UI state: Zustand slices under `apps/desktop/src/store/zustand/*`
+- Rust-side DB/storage capabilities: `plugins/db2`, `crates/db-*`
 
 ### 4) Frontend feature organization
-- Routing: `apps/desktop/src/routes/*` (TanStack file-based routing).
-- Session UX and transcript editing/live state: `apps/desktop/src/session/*`.
-- Shared workspace packages:
-  - `packages/ui` (design system + Tailwind-generated globals)
-  - `packages/transcript`, `packages/store`, `packages/utils`, etc.
+
+- Routes: `apps/desktop/src/routes/*` (TanStack file-based routing)
+- Session/transcript UX: `apps/desktop/src/session/*`
+- Shared UI/domain packages: `packages/ui`, `packages/transcript`, `packages/store`, `packages/utils`
+
+## Additional assistant-instruction sources
+
+- Searched for repo-level Cursor/Copilot assistant rule files and found none:
+  - `.cursor/rules/**`
+  - `.cursorrules`
+  - `.github/copilot-instructions.md`
+- In this repository, treat this `CLAUDE.md` + `docs/plans/` as the operative guidance.
 
 ## Important implementation conventions
 
