@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { StickyNoteIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { commands as fsSyncCommands } from "@openmushi/plugin-fs-sync";
@@ -16,6 +16,13 @@ import { OuterHeader } from "./components/outer-header";
 import { SessionPreviewCard } from "./components/session-preview-card";
 import { useCurrentNoteTab, useHasTranscript } from "./components/shared";
 import { TitleInput } from "./components/title-input";
+import { ExtensionRail } from "./insights/components/ExtensionRail";
+import { GenerateInsightsCta } from "./insights/components/GenerateInsightsCta";
+import { graphExtension } from "./insights/extensions/graph";
+import { deriveInsightEligibility } from "./insights/eligibility";
+import { listSessionExtensions } from "./insights/registry";
+import { createTinyBaseArtifactRowPersister, reduceInsightState } from "./insights/state";
+import type { ExtensionRunResult } from "./insights/types";
 import { useAutoEnhance } from "./hooks/useAutoEnhance";
 import { useIsSessionEnhancing } from "./hooks/useEnhancedNotes";
 
@@ -201,12 +208,34 @@ function TabContentNoteInner({
   const currentView = useCurrentNoteTab(tab);
   const { generateTitle } = useTitleGeneration(tab);
   const hasTranscript = useHasTranscript(tab.id);
+  const openNew = useTabs((state) => state.openNew);
 
   const sessionId = tab.id;
+  const transcriptIds = main.UI.useSliceRowIds(
+    main.INDEXES.transcriptBySession,
+    sessionId,
+    main.STORE_ID,
+  );
+  const transcriptWordCount = (transcriptIds ?? []).length;
   const { skipReason } = useAutoEnhance(tab);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
 
   const sessionMode = useListener((state) => state.getSessionMode(sessionId));
+  const normalizedSessionMode = sessionMode === "inactive" ? "inactive" : "active";
+  const eligibility = useMemo(
+    () =>
+      deriveInsightEligibility({
+        hasTranscript,
+        transcriptWordCount,
+        sessionMode: normalizedSessionMode,
+      }),
+    [hasTranscript, transcriptWordCount, normalizedSessionMode],
+  );
+  const [insightState, dispatchInsight] = useReducer(reduceInsightState, {
+    phase: "idle",
+  });
+  const store = main.UI.useStore(main.STORE_ID);
+  const graphReady = useIsGraphReady(sessionId);
   const prevSessionMode = useRef<string | null>(sessionMode);
 
   useAutoFocusTitle({ sessionId, titleInputRef });
@@ -238,6 +267,113 @@ function TabContentNoteInner({
     return () => clearTimeout(timer);
   }, [showConsentBanner]);
 
+  useEffect(() => {
+    if (eligibility.eligible) {
+      dispatchInsight({ type: "INSIGHTS_ELIGIBLE" });
+    }
+  }, [eligibility.eligible]);
+
+  useEffect(() => {
+    if (graphReady) {
+      dispatchInsight({ type: "GRAPH_READY_HYDRATED" });
+    }
+  }, [graphReady]);
+
+  const runGraphGeneration = React.useCallback(async () => {
+    dispatchInsight({ type: "GRAPH_GENERATION_STARTED" });
+
+    try {
+      const result = await graphExtension.run({
+        sessionId,
+        persistArtifactRow: store
+          ? createTinyBaseArtifactRowPersister(store)
+          : undefined,
+      });
+
+      if (result.status !== "succeeded") {
+        dispatchInsight({
+          type: "GRAPH_GENERATION_FAILED",
+          error: {
+            code: "extension_failed",
+            userMessage: "Graph generation failed. Try again.",
+            retryable: true,
+          },
+        });
+        return;
+      }
+
+      const graphResult = result as typeof result & {
+        result?: { type?: "graph"; scope?: { scope: "note"; sessionId: string } };
+      };
+
+      if (graphResult.result?.type === "graph") {
+        openNew({
+          type: "graph",
+          scope: graphResult.result.scope ?? { scope: "note", sessionId },
+        });
+      }
+
+      dispatchInsight({ type: "GRAPH_GENERATION_SUCCEEDED" });
+      dispatchInsight({ type: "EXTENSIONS_SUGGESTED" });
+    } catch (error) {
+      dispatchInsight({
+        type: "GRAPH_GENERATION_FAILED",
+        error: {
+          code: error instanceof Error && error.message ? error.message : "unknown_error",
+          userMessage: "Graph generation failed. Try again.",
+          retryable: true,
+          debugMeta: error instanceof Error ? { message: error.message } : undefined,
+        },
+      });
+    }
+  }, [openNew, sessionId, store]);
+
+  const handleGenerateInsights = React.useCallback(() => {
+    void runGraphGeneration();
+  }, [runGraphGeneration]);
+
+  const handleRetryInsights = React.useCallback(() => {
+    void runGraphGeneration();
+  }, [runGraphGeneration]);
+
+  const extensionContext = useMemo(
+    () => ({
+      sessionId,
+      persistArtifactRow: store ? createTinyBaseArtifactRowPersister(store) : undefined,
+    }),
+    [sessionId, store],
+  );
+
+  const extensionDefinitions = useMemo(() => listSessionExtensions(), []);
+
+  const handleRunExtension = React.useCallback(
+    async (extensionId: string) => {
+      const extension = extensionDefinitions.find((item) => item.id === extensionId);
+      if (!extension || !extension.canRun(extensionContext)) {
+        return;
+      }
+
+      try {
+        const result = await extension.run(extensionContext);
+        extension.openResult(result);
+
+        const openTarget = (result as ExtensionRunResult & {
+          result?: { type?: "graph"; scope?: { scope: "note"; sessionId: string } };
+        }).result;
+
+        if (openTarget?.type === "graph" && openTarget.scope) {
+          openNew(openTarget);
+        }
+      } catch (error) {
+        console.warn("[Insights] Extension run failed", {
+          extensionId,
+          error,
+        });
+      }
+    },
+    [extensionContext, extensionDefinitions],
+  );
+
   const focusTitle = React.useCallback(() => {
     titleInputRef.current?.focus();
   }, []);
@@ -256,6 +392,25 @@ function TabContentNoteInner({
         <div className="flex h-full flex-col">
           <div className="pr-1 pl-2">
             <OuterHeader sessionId={tab.id} currentView={currentView} />
+          </div>
+          <div className="mt-2 shrink-0 px-3">
+            <GenerateInsightsCta
+              eligible={eligibility.eligible}
+              phase={insightState.phase}
+              error={insightState.error}
+              onGenerate={handleGenerateInsights}
+              onRetry={handleRetryInsights}
+            />
+          </div>
+          <div className="mt-2 shrink-0 px-3">
+            <ExtensionRail
+              phase={insightState.phase}
+              extensions={extensionDefinitions}
+              context={extensionContext}
+              onRunExtension={(extensionId) => {
+                void handleRunExtension(extensionId);
+              }}
+            />
           </div>
           <div className="mt-2 shrink-0 px-3">
             <TitleInput
@@ -357,6 +512,30 @@ function StatusBanner({
     </AnimatePresence>,
     document.body,
   );
+}
+
+function useIsGraphReady(sessionId: string): boolean {
+  const store = main.UI.useStore(main.STORE_ID);
+  const artifactIds = main.UI.useSliceRowIds(
+    main.INDEXES.extensionArtifactsBySession,
+    sessionId,
+    main.STORE_ID,
+  );
+
+  if (!store || !artifactIds || artifactIds.length === 0) {
+    return false;
+  }
+
+  return artifactIds.some((artifactId) => {
+    const extensionId = store.getCell(
+      "extension_artifacts",
+      artifactId,
+      "extension_id",
+    );
+    const status = store.getCell("extension_artifacts", artifactId, "status");
+
+    return extensionId === "graph" && status === "succeeded";
+  });
 }
 
 function useAutoFocusTitle({

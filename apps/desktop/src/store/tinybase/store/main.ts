@@ -7,6 +7,7 @@ import {
   createMetrics,
   createQueries,
   createRelationships,
+  type Indexes,
   type MergeableStore,
 } from "tinybase/with-schemas";
 
@@ -59,6 +60,127 @@ export const testUtils = {
   createRelationships,
   SCHEMA,
 };
+
+export const createMainIndexes = (store: Store): Indexes<Schemas> =>
+  createIndexes(store)
+    .setIndexDefinition(INDEXES.humansByOrg, "humans", "org_id", "name")
+    .setIndexDefinition(INDEXES.humansByEmail, "humans", "email")
+    .setIndexDefinition(
+      INDEXES.sessionParticipantsBySession,
+      "mapping_session_participant",
+      "session_id",
+    )
+    .setIndexDefinition(
+      INDEXES.sessionsByHuman,
+      "mapping_session_participant",
+      "human_id",
+    )
+    .setIndexDefinition(
+      INDEXES.sessionsByWorkspace,
+      "sessions",
+      "workspace_id",
+      "created_at",
+    )
+    .setIndexDefinition(
+      INDEXES.transcriptBySession,
+      "transcripts",
+      "session_id",
+      "created_at",
+    )
+    .setIndexDefinition(
+      INDEXES.eventsByDate,
+      "events",
+      (getCell) => {
+        const cell = getCell("started_at");
+        if (!cell) {
+          return "";
+        }
+
+        const d = new Date(cell);
+        if (isNaN(d.getTime())) {
+          return "";
+        }
+
+        return format(d, "yyyy-MM-dd");
+      },
+      "started_at",
+      (a, b) => a.localeCompare(b),
+      (a, b) => String(a).localeCompare(String(b)),
+    )
+    .setIndexDefinition(
+      INDEXES.sessionByDateWithoutEvent,
+      "sessions",
+      (getCell) => {
+        if (getCell("event_json")) {
+          return "";
+        }
+
+        const cell = getCell("created_at");
+        if (!cell) {
+          return "";
+        }
+
+        const d = new Date(cell);
+        if (isNaN(d.getTime())) {
+          return "";
+        }
+
+        return format(d, "yyyy-MM-dd");
+      },
+      "created_at",
+      (a, b) => a.localeCompare(b),
+      (a, b) => String(a).localeCompare(String(b)),
+    )
+    .setIndexDefinition(INDEXES.sessionsByEventTrackingId, "sessions", (getCell) => {
+      const eventJson = getCell("event_json") as string | undefined;
+      if (!eventJson) return "";
+      return getSessionEvent({ event_json: eventJson })?.tracking_id || "";
+    })
+    .setIndexDefinition(
+      INDEXES.tagSessionsBySession,
+      "mapping_tag_session",
+      "session_id",
+    )
+    .setIndexDefinition(
+      INDEXES.chatMessagesByGroup,
+      "chat_messages",
+      "chat_group_id",
+      "created_at",
+    )
+    .setIndexDefinition(
+      INDEXES.enhancedNotesBySession,
+      "enhanced_notes",
+      "session_id",
+      "position",
+    )
+    .setIndexDefinition(
+      INDEXES.enhancedNotesByTemplate,
+      "enhanced_notes",
+      "template_id",
+      "position",
+    )
+    .setIndexDefinition(
+      INDEXES.mentionsBySource,
+      "mapping_mention",
+      "source_id",
+    )
+    .setIndexDefinition(
+      INDEXES.mentionsByTarget,
+      "mapping_mention",
+      "target_id",
+    )
+    .setIndexDefinition(
+      INDEXES.extensionArtifactsBySession,
+      "extension_artifacts",
+      "session_id",
+      "created_at",
+    )
+    .setIndexDefinition(
+      INDEXES.extensionArtifactsByExtension,
+      "extension_artifacts",
+      "extension_id",
+      "created_at",
+    );
 
 export const StoreComponent = () => {
   const store = useCreateMergeableStore(() =>
@@ -216,119 +338,7 @@ export const StoreComponent = () => {
     [],
   )!;
 
-  const indexes = useCreateIndexes(store, (store) =>
-    createIndexes(store)
-      .setIndexDefinition(INDEXES.humansByOrg, "humans", "org_id", "name")
-      .setIndexDefinition(INDEXES.humansByEmail, "humans", "email")
-      .setIndexDefinition(
-        INDEXES.sessionParticipantsBySession,
-        "mapping_session_participant",
-        "session_id",
-      )
-      .setIndexDefinition(
-        INDEXES.sessionsByHuman,
-        "mapping_session_participant",
-        "human_id",
-      )
-      .setIndexDefinition(
-        INDEXES.sessionsByWorkspace,
-        "sessions",
-        "workspace_id",
-        "created_at",
-      )
-      .setIndexDefinition(
-        INDEXES.transcriptBySession,
-        "transcripts",
-        "session_id",
-        "created_at",
-      )
-      .setIndexDefinition(
-        INDEXES.eventsByDate,
-        "events",
-        (getCell) => {
-          const cell = getCell("started_at");
-          if (!cell) {
-            return "";
-          }
-
-          const d = new Date(cell);
-          if (isNaN(d.getTime())) {
-            return "";
-          }
-
-          return format(d, "yyyy-MM-dd");
-        },
-        "started_at",
-        (a, b) => a.localeCompare(b),
-        (a, b) => String(a).localeCompare(String(b)),
-      )
-      .setIndexDefinition(
-        INDEXES.sessionByDateWithoutEvent,
-        "sessions",
-        (getCell) => {
-          if (getCell("event_json")) {
-            return "";
-          }
-
-          const cell = getCell("created_at");
-          if (!cell) {
-            return "";
-          }
-
-          const d = new Date(cell);
-          if (isNaN(d.getTime())) {
-            return "";
-          }
-
-          return format(d, "yyyy-MM-dd");
-        },
-        "created_at",
-        (a, b) => a.localeCompare(b),
-        (a, b) => String(a).localeCompare(String(b)),
-      )
-      .setIndexDefinition(
-        INDEXES.sessionsByEventTrackingId,
-        "sessions",
-        (getCell) => {
-          const eventJson = getCell("event_json") as string | undefined;
-          if (!eventJson) return "";
-          return getSessionEvent({ event_json: eventJson })?.tracking_id || "";
-        },
-      )
-      .setIndexDefinition(
-        INDEXES.tagSessionsBySession,
-        "mapping_tag_session",
-        "session_id",
-      )
-      .setIndexDefinition(
-        INDEXES.chatMessagesByGroup,
-        "chat_messages",
-        "chat_group_id",
-        "created_at",
-      )
-      .setIndexDefinition(
-        INDEXES.enhancedNotesBySession,
-        "enhanced_notes",
-        "session_id",
-        "position",
-      )
-      .setIndexDefinition(
-        INDEXES.enhancedNotesByTemplate,
-        "enhanced_notes",
-        "template_id",
-        "position",
-      )
-      .setIndexDefinition(
-        INDEXES.mentionsBySource,
-        "mapping_mention",
-        "source_id",
-      )
-      .setIndexDefinition(
-        INDEXES.mentionsByTarget,
-        "mapping_mention",
-        "target_id",
-      ),
-  );
+  const indexes = useCreateIndexes(store, createMainIndexes);
 
   const metrics = useCreateMetrics(store, (store) =>
     createMetrics(store)
@@ -393,6 +403,8 @@ export const INDEXES = {
   enhancedNotesByTemplate: "enhancedNotesByTemplate",
   mentionsBySource: "mentionsBySource",
   mentionsByTarget: "mentionsByTarget",
+  extensionArtifactsBySession: "extensionArtifactsBySession",
+  extensionArtifactsByExtension: "extensionArtifactsByExtension",
 } as const;
 
 export const RELATIONSHIPS = {

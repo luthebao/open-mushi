@@ -407,6 +407,7 @@ export function Header({
   const isBatchProcessing = sessionMode === "running_batch";
   const isLiveProcessing = sessionMode === "active";
   const isMeetingOver = !isLiveProcessing && !isBatchProcessing;
+  const isGraphReady = useIsGraphReady(sessionId);
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const { atStart, atEnd } = useScrollFade(tabsRef, "horizontal", [
@@ -467,7 +468,7 @@ export function Header({
                 </NoteTab>
               );
             })}
-            {isMeetingOver && (
+            {isMeetingOver && isGraphReady && (
               <CreateOtherFormatButton
                 sessionId={sessionId}
                 handleTabChange={handleTabChange}
@@ -648,6 +649,30 @@ function useEnhanceLogic(sessionId: string, enhancedNoteId: string) {
     onCancel: enhanceTask.cancel,
     currentStep: enhanceTask.currentStep,
   };
+}
+
+function useIsGraphReady(sessionId: string): boolean {
+  const store = main.UI.useStore(main.STORE_ID);
+  const artifactIds = main.UI.useSliceRowIds(
+    main.INDEXES.extensionArtifactsBySession,
+    sessionId,
+    main.STORE_ID,
+  );
+
+  if (!store || !artifactIds || artifactIds.length === 0) {
+    return false;
+  }
+
+  return artifactIds.some((artifactId) => {
+    const extensionId = store.getCell(
+      "extension_artifacts",
+      artifactId,
+      "extension_id",
+    );
+    const status = store.getCell("extension_artifacts", artifactId, "status");
+
+    return extensionId === "graph" && status === "succeeded";
+  });
 }
 
 function TemplateButton({

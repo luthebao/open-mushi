@@ -227,6 +227,17 @@ export const promptSchema = z.object({
   content: z.string(),
 });
 
+export const extensionArtifactSchema = z.object({
+  user_id: z.string(),
+  session_id: z.string(),
+  extension_id: z.string(),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.preprocess((val) => val ?? undefined, z.string().optional()),
+  artifact_json: z.preprocess((val) => val ?? undefined, z.string().optional()),
+  error_code: z.preprocess((val) => val ?? undefined, z.string().optional()),
+});
+
 export const wordSchema = z.object({
   text: z.string(),
   start_ms: z.number(),
@@ -323,6 +334,7 @@ export type ChatShortcut = z.infer<typeof chatShortcutSchema>;
 export type Memory = z.infer<typeof memorySchema>;
 export type EnhancedNote = z.infer<typeof enhancedNoteSchema>;
 export type Prompt = z.infer<typeof promptSchema>;
+export type ExtensionArtifact = z.infer<typeof extensionArtifactSchema>;
 export type AIProvider = z.infer<typeof aiProviderSchema>;
 export type General = z.infer<typeof generalSchema>;
 
@@ -337,6 +349,9 @@ export type EnhancedNoteStorage = ToStorageType<typeof enhancedNoteSchema>;
 export type HumanStorage = ToStorageType<typeof humanSchema>;
 export type OrganizationStorage = ToStorageType<typeof organizationSchema>;
 export type PromptStorage = ToStorageType<typeof promptSchema>;
+export type ExtensionArtifactStorage = ToStorageType<
+  typeof extensionArtifactSchema
+>;
 export type ChatShortcutStorage = ToStorageType<typeof chatShortcutSchema>;
 export type MemoryStorage = ToStorageType<typeof memorySchema>;
 export type EventStorage = ToStorageType<typeof eventSchema>;

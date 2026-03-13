@@ -16,6 +16,7 @@ import {
 } from "./artifacts";
 import { MAX_GRAPH_NODES, type GraphData, type GraphScope } from "./types";
 import { useListener } from "~/stt/contexts";
+import type { GraphTabInput } from "~/store/zustand/tabs";
 
 const EMPTY: GraphData = { nodes: [], edges: [] };
 
@@ -55,17 +56,22 @@ async function saveGraphData(scope: GraphScope, data: GraphData): Promise<void> 
     const baseResult = await settingsCommands.vaultBase();
     if (baseResult.status === "error") return;
     const path = [baseResult.data, "graphs", `${scopeKey(scope)}.json`].join(sep());
-    await fs2Commands.writeTextFile(path, JSON.stringify(data));
+    const writeResult = await fs2Commands.writeTextFile(path, JSON.stringify(data));
+    if (writeResult.status === "error") {
+      throw writeResult;
+    }
   } catch (e) {
     console.warn("[Graph] Failed to save graph data:", e);
   }
 }
 
-async function loadGraphData(scope: GraphScope): Promise<GraphData | null> {
+async function loadGraphDataByScopeKey(
+  currentScopeKey: string,
+): Promise<GraphData | null> {
   try {
     const baseResult = await settingsCommands.vaultBase();
     if (baseResult.status === "error") return null;
-    const path = [baseResult.data, "graphs", `${scopeKey(scope)}.json`].join(sep());
+    const path = [baseResult.data, "graphs", `${currentScopeKey}.json`].join(sep());
     const result = await fs2Commands.readTextFile(path);
     if (result.status === "error") return null;
     return JSON.parse(result.data) as GraphData;
@@ -186,6 +192,26 @@ export type GraphDataState = {
   generate: () => void;
 };
 
+export type GraphOpenTarget = GraphTabInput;
+
+export type GraphRunResult = {
+  tabType: "graph";
+  scope: GraphScope;
+};
+
+export function createGraphOpenTarget(
+  sessionId: string,
+): GraphOpenTarget & GraphRunResult {
+  return {
+    type: "graph",
+    tabType: "graph",
+    scope: {
+      scope: "note",
+      sessionId,
+    },
+  };
+}
+
 type GenerateAbortCause = "superseded" | "timeout";
 
 function scopeIncludesSession(
@@ -207,6 +233,41 @@ export function resolveAbortMessage(cause: GenerateAbortCause | undefined): stri
     return "Generation timed out. Try again or use a faster model.";
   }
   return null;
+}
+
+export function abortInFlightGeneration(params: {
+  abortRef: { current: AbortController | null };
+  activeRunIdRef: { current: number };
+}): void {
+  const { abortRef, activeRunIdRef } = params;
+  const controller = abortRef.current;
+
+  if (controller) {
+    controller.abort();
+    abortRef.current = null;
+  }
+
+  activeRunIdRef.current += 1;
+}
+
+export function resetTransientGenerationState(params: {
+  setLoading: (loading: boolean) => void;
+  setProgress: (progress: string) => void;
+}): void {
+  const { setLoading, setProgress } = params;
+  setLoading(false);
+  setProgress("");
+}
+
+export function abortInFlightGenerationForScopeChange(params: {
+  abortRef: { current: AbortController | null };
+  activeRunIdRef: { current: number };
+  setLoading: (loading: boolean) => void;
+  setProgress: (progress: string) => void;
+}): void {
+  const { abortRef, activeRunIdRef, setLoading, setProgress } = params;
+  abortInFlightGeneration({ abortRef, activeRunIdRef });
+  resetTransientGenerationState({ setLoading, setProgress });
 }
 
 export function shouldAutoAttemptCompletedSession(params: {
@@ -265,7 +326,14 @@ export function useGraphData(scope: GraphScope): GraphDataState {
     const loadVersion = ++loadVersionRef.current;
     let cancelled = false;
 
-    void loadGraphData(scope).then((cached) => {
+    abortInFlightGenerationForScopeChange({
+      abortRef,
+      activeRunIdRef,
+      setLoading,
+      setProgress,
+    });
+
+    void loadGraphDataByScopeKey(currentScopeKey).then((cached) => {
       if (cancelled || loadVersion !== loadVersionRef.current) {
         return;
       }
@@ -275,8 +343,14 @@ export function useGraphData(scope: GraphScope): GraphDataState {
 
     return () => {
       cancelled = true;
+      abortInFlightGenerationForScopeChange({
+        abortRef,
+        activeRunIdRef,
+        setLoading,
+        setProgress,
+      });
     };
-  }, [currentScopeKey, scope]);
+  }, [currentScopeKey]);
 
   const generate = useCallback(async () => {
     if (!store) {

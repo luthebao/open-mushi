@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-async function loadModule() {
+function ensureWindowStub() {
   const currentWindow = (globalThis as { window?: unknown }).window;
   if (
     !currentWindow ||
@@ -12,8 +12,16 @@ async function loadModule() {
       removeEventListener: () => {},
     };
   }
+}
 
+async function loadModule() {
+  ensureWindowStub();
   return import("./useGraphData");
+}
+
+async function loadGraphAdapter() {
+  ensureWindowStub();
+  return import("~/session/insights/extensions/graph");
 }
 
 describe("resolveAbortMessage", () => {
@@ -25,6 +33,62 @@ describe("resolveAbortMessage", () => {
     );
     expect(resolveAbortMessage("superseded")).toBeNull();
     expect(resolveAbortMessage(undefined)).toBeNull();
+  });
+});
+
+describe("abortInFlightGeneration", () => {
+  it("aborts active controller, clears ref, and bumps run id", async () => {
+    const { abortInFlightGeneration } = await loadModule();
+
+    const controller = new AbortController();
+    const abortRef = { current: controller };
+    const activeRunIdRef = { current: 3 };
+
+    abortInFlightGeneration({ abortRef, activeRunIdRef });
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(abortRef.current).toBeNull();
+    expect(activeRunIdRef.current).toBe(4);
+  });
+
+  it("still bumps run id when there is no active controller", async () => {
+    const { abortInFlightGeneration } = await loadModule();
+
+    const abortRef = { current: null as AbortController | null };
+    const activeRunIdRef = { current: 7 };
+
+    abortInFlightGeneration({ abortRef, activeRunIdRef });
+
+    expect(abortRef.current).toBeNull();
+    expect(activeRunIdRef.current).toBe(8);
+  });
+
+  it("resets loading/progress on scope-change abort", async () => {
+    const { abortInFlightGenerationForScopeChange } = await loadModule();
+
+    const controller = new AbortController();
+    const abortRef = { current: controller };
+    const activeRunIdRef = { current: 10 };
+
+    let loading = true;
+    let progress = "Sending to AI...";
+
+    abortInFlightGenerationForScopeChange({
+      abortRef,
+      activeRunIdRef,
+      setLoading: (next) => {
+        loading = next;
+      },
+      setProgress: (next) => {
+        progress = next;
+      },
+    });
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(abortRef.current).toBeNull();
+    expect(activeRunIdRef.current).toBe(11);
+    expect(loading).toBe(false);
+    expect(progress).toBe("");
   });
 });
 
@@ -140,5 +204,34 @@ describe("shouldAutoAttemptCompletedSession", () => {
         alreadyRepresented: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("graph extension adapter", () => {
+  it("graph canRun requires transcript", async () => {
+    const { graphExtension } = await loadGraphAdapter();
+
+    expect(graphExtension.canRun({ sessionId: "session-1" })).toBe(true);
+    expect(graphExtension.canRun({})).toBe(false);
+  });
+
+  it("graph run returns succeeded artifact ref", async () => {
+    const { graphExtension } = await loadGraphAdapter();
+
+    const result = await graphExtension.run({ sessionId: "session-1" });
+
+    expect(result).toEqual({
+      status: "succeeded",
+      extensionId: "graph",
+      artifactRef: "graph:session-1",
+      result: {
+        type: "graph",
+        tabType: "graph",
+        scope: {
+          scope: "note",
+          sessionId: "session-1",
+        },
+      },
+    });
   });
 });
