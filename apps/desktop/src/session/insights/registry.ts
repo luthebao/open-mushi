@@ -18,6 +18,7 @@ const builtInExtensions: SessionExtensionDefinition[] = [
   graphExtension,
   {
     id: "flashcards",
+    source: { kind: "built_in" },
     title: "Flashcards",
     description: "Create study cards from transcript highlights.",
     icon: "cards",
@@ -29,6 +30,7 @@ const builtInExtensions: SessionExtensionDefinition[] = [
   },
   {
     id: "homework",
+    source: { kind: "built_in" },
     title: "Homework",
     description: "Draft post-session tasks and practice work.",
     icon: "book-open",
@@ -40,6 +42,7 @@ const builtInExtensions: SessionExtensionDefinition[] = [
   },
   {
     id: "report",
+    source: { kind: "built_in" },
     title: "Report",
     description: "Generate a compact session report.",
     icon: "file-text",
@@ -60,11 +63,18 @@ export function registerSessionExtension(definition: unknown): void {
     throw new Error("Session extension graph metadata is incomplete");
   }
 
-  if (registry.some((existing) => existing.id === definition.id)) {
+  const existingIndex = registry.findIndex((existing) => existing.id === definition.id);
+
+  if (existingIndex === -1) {
+    registry.push(definition);
     return;
   }
 
-  registry.push(definition);
+  const existing = registry[existingIndex];
+
+  if (existing.source.kind === "skill" && definition.source.kind === "built_in") {
+    registry[existingIndex] = definition;
+  }
 }
 
 export function ensureBuiltInSessionExtensions(): void {

@@ -1,3 +1,9 @@
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    str::FromStr,
+};
+
 use crate::AppExt;
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
@@ -15,6 +21,153 @@ struct PluginManifestFile {
     name: String,
     version: String,
     main: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillManifestEntry {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub icon: Option<String>,
+    pub capabilities: Vec<String>,
+    pub input_requirements: Vec<String>,
+    pub template: Option<String>,
+    pub skill_path: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillManifestFile {
+    id: String,
+    title: String,
+    description: String,
+    #[serde(default)]
+    icon: Option<String>,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    input_requirements: Vec<String>,
+    #[serde(default)]
+    template: Option<String>,
+}
+
+fn is_allowed_input_requirement(value: &str) -> bool {
+    matches!(value, "transcript" | "graph" | "notes")
+}
+
+fn canonical_within(path: &Path, base: &Path) -> bool {
+    let Ok(canonical_path) = std::fs::canonicalize(path) else {
+        return false;
+    };
+
+    let Ok(canonical_base) = std::fs::canonicalize(base) else {
+        return false;
+    };
+
+    canonical_path.starts_with(canonical_base)
+}
+
+fn parse_skill_manifest(raw: &str) -> Option<SkillManifestFile> {
+    use openmushi_frontmatter::Document;
+
+    let doc = Document::<HashMap<String, serde_json::Value>>::from_str(raw).ok()?;
+    let frontmatter = serde_json::to_value(&doc.frontmatter).ok()?;
+
+    serde_json::from_value(frontmatter).ok()
+}
+
+fn is_valid_skill_manifest(manifest: &SkillManifestFile) -> bool {
+    if manifest.id.trim().is_empty()
+        || manifest.title.trim().is_empty()
+        || manifest.description.trim().is_empty()
+    {
+        return false;
+    }
+
+    manifest
+        .input_requirements
+        .iter()
+        .all(|value| is_allowed_input_requirement(value))
+}
+
+fn collect_skills_from_dir(skills_dir: &Path) -> Vec<SkillManifestEntry> {
+    let mut skills = Vec::new();
+    let mut seen_ids = HashSet::new();
+
+    let Ok(entries) = std::fs::read_dir(skills_dir) else {
+        return skills;
+    };
+
+    let mut entries: Vec<_> = entries.collect();
+    entries.sort_by_key(|entry| match entry {
+        Ok(entry) => entry.file_name(),
+        Err(_) => std::ffi::OsString::new(),
+    });
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let root = entry.path();
+        if !canonical_within(&root, skills_dir) {
+            continue;
+        }
+
+        let skill_path = root.join("SKILL.md");
+        if !skill_path.exists() || !skill_path.is_file() {
+            continue;
+        }
+
+        if !canonical_within(&skill_path, skills_dir) {
+            continue;
+        }
+
+        let raw = match std::fs::read_to_string(&skill_path) {
+            Ok(raw) => raw,
+            Err(_) => continue,
+        };
+
+        let Some(manifest) = parse_skill_manifest(&raw) else {
+            continue;
+        };
+
+        if !is_valid_skill_manifest(&manifest) {
+            continue;
+        }
+
+        if !seen_ids.insert(manifest.id.clone()) {
+            continue;
+        }
+
+        let canonical_skill_path = match std::fs::canonicalize(&skill_path) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+
+        skills.push(SkillManifestEntry {
+            id: manifest.id,
+            title: manifest.title,
+            description: manifest.description,
+            icon: manifest.icon,
+            capabilities: manifest.capabilities,
+            input_requirements: manifest.input_requirements,
+            template: manifest.template,
+            skill_path: canonical_skill_path.to_string_lossy().to_string(),
+        });
+    }
+
+    skills.sort_by(|a, b| a.id.cmp(&b.id));
+    skills
 }
 
 #[tauri::command]
@@ -235,4 +388,148 @@ pub async fn list_plugins<R: tauri::Runtime>(
     plugins.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(plugins)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_skills<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<Vec<SkillManifestEntry>, String> {
+    use tauri_plugin_settings::SettingsPluginExt;
+
+    let base = app.settings().global_base().map_err(|e| e.to_string())?;
+    let skills_dir = base.join("skills").into_std_path_buf();
+
+    if !skills_dir.exists() {
+        std::fs::create_dir_all(&skills_dir).map_err(|e| e.to_string())?;
+        return Ok(Vec::new());
+    }
+
+    Ok(collect_skills_from_dir(&skills_dir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(prefix: &str) -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "openmushi-{}-{}-{}",
+                prefix,
+                std::process::id(),
+                nonce
+            ));
+            std::fs::create_dir_all(&path).expect("temp test directory should be created");
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("parent directories should be created");
+        }
+        std::fs::write(path, content).expect("file should be written");
+    }
+
+    fn valid_skill_md(id: &str, title: &str) -> String {
+        format!(
+            "---\nid: {id}\ntitle: {title}\ndescription: Sample\ninputRequirements:\n  - transcript\ncapabilities:\n  - summarize\ntemplate: basic\n---\n# Skill\n"
+        )
+    }
+
+    #[test]
+    fn collects_only_valid_skill_manifests() {
+        let dir = TempDir::new("skills-valid");
+        let skills_dir = dir.path().join("skills");
+        std::fs::create_dir_all(&skills_dir).expect("skills directory should be created");
+
+        write_file(
+            &skills_dir.join("ok").join("SKILL.md"),
+            &valid_skill_md("skill.ok", "OK"),
+        );
+
+        write_file(
+            &skills_dir.join("missing-required").join("SKILL.md"),
+            "---\nid: skill.bad\ntitle: Bad\ndescription: Missing input requirements\n---\n# Skill\n",
+        );
+
+        write_file(
+            &skills_dir.join("invalid-input").join("SKILL.md"),
+            "---\nid: skill.bad2\ntitle: Bad 2\ndescription: Invalid input requirements\ninputRequirements:\n  - unknown\n---\n# Skill\n",
+        );
+
+        let skills = collect_skills_from_dir(&skills_dir);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "skill.ok");
+        assert_eq!(skills[0].title, "OK");
+        assert_eq!(skills[0].input_requirements, vec!["transcript"]);
+    }
+
+    #[test]
+    fn deduplicates_by_id_with_first_valid_winning() {
+        let dir = TempDir::new("skills-dedupe");
+        let skills_dir = dir.path().join("skills");
+        std::fs::create_dir_all(&skills_dir).expect("skills directory should be created");
+
+        write_file(
+            &skills_dir.join("a-first").join("SKILL.md"),
+            &valid_skill_md("skill.dup", "First"),
+        );
+        write_file(
+            &skills_dir.join("z-second").join("SKILL.md"),
+            &valid_skill_md("skill.dup", "Second"),
+        );
+
+        let skills = collect_skills_from_dir(&skills_dir);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "skill.dup");
+        assert_eq!(skills[0].title, "First");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn skips_skill_files_that_canonicalize_outside_skills_directory() {
+        use std::os::unix::fs::symlink;
+
+        let dir = TempDir::new("skills-path-hardening");
+        let skills_dir = dir.path().join("skills");
+        std::fs::create_dir_all(&skills_dir).expect("skills directory should be created");
+
+        let outside_path = dir.path().join("outside").join("SKILL.md");
+        write_file(&outside_path, &valid_skill_md("skill.outside", "Outside"));
+
+        let package_dir = skills_dir.join("linked");
+        std::fs::create_dir_all(&package_dir).expect("package directory should be created");
+        symlink(&outside_path, package_dir.join("SKILL.md"))
+            .expect("symlink should be created");
+
+        let skills = collect_skills_from_dir(&skills_dir);
+
+        assert!(skills.is_empty());
+    }
 }

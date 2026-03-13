@@ -20,7 +20,9 @@ import { ExtensionRail } from "./insights/components/ExtensionRail";
 import { GenerateInsightsCta } from "./insights/components/GenerateInsightsCta";
 import { graphExtension } from "./insights/extensions/graph";
 import { deriveInsightEligibility } from "./insights/eligibility";
-import { listSessionExtensions } from "./insights/registry";
+import { createSkillSessionExtension } from "./insights/extensions/skill";
+import { listDiscoveredSkillManifests } from "./insights/loader";
+import { listSessionExtensions, registerSessionExtension } from "./insights/registry";
 import { createTinyBaseArtifactRowPersister, reduceInsightState } from "./insights/state";
 import type { ExtensionRunResult } from "./insights/types";
 import { useAutoEnhance } from "./hooks/useAutoEnhance";
@@ -211,6 +213,9 @@ function TabContentNoteInner({
   const openNew = useTabs((state) => state.openNew);
 
   const sessionId = tab.id;
+  const rawMd = main.UI.useCell("sessions", sessionId, "raw_md", main.STORE_ID) as
+    | string
+    | undefined;
   const transcriptIds = main.UI.useSliceRowIds(
     main.INDEXES.transcriptBySession,
     sessionId,
@@ -219,6 +224,7 @@ function TabContentNoteInner({
   const transcriptWordCount = (transcriptIds ?? []).length;
   const { skipReason } = useAutoEnhance(tab);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [extensionsVersion, setExtensionsVersion] = useState(0);
 
   const sessionMode = useListener((state) => state.getSessionMode(sessionId));
   const normalizedSessionMode = sessionMode === "inactive" ? "inactive" : "active";
@@ -236,6 +242,19 @@ function TabContentNoteInner({
   });
   const store = main.UI.useStore(main.STORE_ID);
   const graphReady = useIsGraphReady(sessionId);
+  const graphArtifactCount = useGraphArtifactCount(sessionId);
+  const notesWordCount = useMemo(() => {
+    if (!rawMd) {
+      return 0;
+    }
+
+    const trimmed = rawMd.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    return trimmed.split(/\s+/).length;
+  }, [rawMd]);
   const prevSessionMode = useRef<string | null>(sessionMode);
 
   useAutoFocusTitle({ sessionId, titleInputRef });
@@ -339,12 +358,38 @@ function TabContentNoteInner({
   const extensionContext = useMemo(
     () => ({
       sessionId,
+      transcriptWordCount,
+      graphArtifactCount,
+      notesWordCount,
       persistArtifactRow: store ? createTinyBaseArtifactRowPersister(store) : undefined,
     }),
-    [sessionId, store],
+    [sessionId, transcriptWordCount, graphArtifactCount, notesWordCount, store],
   );
 
-  const extensionDefinitions = useMemo(() => listSessionExtensions(), []);
+  useEffect(() => {
+    let cancelled = false;
+
+    void listDiscoveredSkillManifests().then((manifests) => {
+      if (cancelled) {
+        return;
+      }
+
+      manifests.forEach((manifest) => {
+        registerSessionExtension(createSkillSessionExtension(manifest));
+      });
+
+      setExtensionsVersion((value) => value + 1);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const extensionDefinitions = useMemo(
+    () => listSessionExtensions(),
+    [extensionsVersion],
+  );
 
   const handleRunExtension = React.useCallback(
     async (extensionId: string) => {
@@ -371,7 +416,7 @@ function TabContentNoteInner({
         });
       }
     },
-    [extensionContext, extensionDefinitions],
+    [extensionContext, extensionDefinitions, openNew],
   );
 
   const focusTitle = React.useCallback(() => {
@@ -515,6 +560,10 @@ function StatusBanner({
 }
 
 function useIsGraphReady(sessionId: string): boolean {
+  return useGraphArtifactCount(sessionId) > 0;
+}
+
+function useGraphArtifactCount(sessionId: string): number {
   const store = main.UI.useStore(main.STORE_ID);
   const artifactIds = main.UI.useSliceRowIds(
     main.INDEXES.extensionArtifactsBySession,
@@ -523,10 +572,10 @@ function useIsGraphReady(sessionId: string): boolean {
   );
 
   if (!store || !artifactIds || artifactIds.length === 0) {
-    return false;
+    return 0;
   }
 
-  return artifactIds.some((artifactId) => {
+  return artifactIds.reduce((count, artifactId) => {
     const extensionId = store.getCell(
       "extension_artifacts",
       artifactId,
@@ -534,8 +583,12 @@ function useIsGraphReady(sessionId: string): boolean {
     );
     const status = store.getCell("extension_artifacts", artifactId, "status");
 
-    return extensionId === "graph" && status === "succeeded";
-  });
+    if (extensionId === "graph" && status === "succeeded") {
+      return count + 1;
+    }
+
+    return count;
+  }, 0);
 }
 
 function useAutoFocusTitle({

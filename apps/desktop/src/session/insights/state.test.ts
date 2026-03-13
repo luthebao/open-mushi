@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { graphExtension } from "./extensions/graph";
 import {
   createTinyBaseArtifactRowPersister,
   reduceInsightState,
@@ -9,9 +8,31 @@ import {
 import type { SessionExtensionDefinition } from "./types";
 import { hasRequiredExtensionContractFields } from "./types";
 
+const graphExtension: SessionExtensionDefinition = {
+  id: "graph",
+  source: { kind: "built_in" },
+  title: "Knowledge Graph",
+  description: "Generate and open a graph view from transcript context.",
+  icon: "network",
+  capabilities: ["graph"],
+  inputRequirements: ["transcript"],
+  canRun: () => true,
+  run: async (ctx) => ({
+    status: "succeeded",
+    extensionId: "graph",
+    artifactRef: `graph:${ctx.sessionId ?? ""}`,
+    result: {
+      action: "open_graph",
+      sessionId: ctx.sessionId ?? "",
+    },
+  }),
+  openResult: () => {},
+};
+
 describe("SessionExtensionDefinition contract", () => {
   const validDefinition = {
     id: "graph",
+    source: { kind: "built_in" as const },
     title: "Knowledge Graph",
     description: "...",
     icon: "network",
@@ -29,6 +50,11 @@ describe("SessionExtensionDefinition contract", () => {
   it("rejects missing required fields", () => {
     const { id: _id, ...missingId } = validDefinition;
     expect(hasRequiredExtensionContractFields(missingId)).toBe(false);
+  });
+
+  it("rejects missing source", () => {
+    const { source: _source, ...missingSource } = validDefinition;
+    expect(hasRequiredExtensionContractFields(missingSource)).toBe(false);
   });
 
   it("rejects wrong field types", () => {
@@ -161,42 +187,44 @@ describe("runExtensionWithArtifactPersistence", () => {
     });
 
     expect(result.status).toBe("succeeded");
-    expect(writes).toEqual([
-      {
-        id: "artifact-1",
-        row: {
-          user_id: "",
-          session_id: "session-1",
-          extension_id: "graph",
-          status: "started",
-          created_at: "2026-03-13T10:00:00.000Z",
-          updated_at: "2026-03-13T10:00:00.000Z",
-          artifact_json: "",
-          error_code: "",
-        },
+    expect(writes).toHaveLength(2);
+    expect(writes[0]).toEqual({
+      id: "artifact-1",
+      row: {
+        user_id: "",
+        session_id: "session-1",
+        extension_id: "graph",
+        status: "started",
+        created_at: "2026-03-13T10:00:00.000Z",
+        updated_at: "2026-03-13T10:00:00.000Z",
+        artifact_json: "",
+        error_code: "",
       },
-      {
-        id: "artifact-1",
-        row: {
-          user_id: "",
-          session_id: "session-1",
-          extension_id: "graph",
-          status: "succeeded",
-          created_at: "2026-03-13T10:00:00.000Z",
-          updated_at: "2026-03-13T10:00:00.000Z",
-          artifact_json: JSON.stringify({
-            artifactRef: "graph:session-1",
-            status: "succeeded",
-            extensionId: "graph",
-            result: {
-              action: "open_graph",
-              sessionId: "session-1",
-            },
-          }),
-          error_code: "",
-        },
+    });
+    expect(writes[1]).toEqual({
+      id: "artifact-1",
+      row: {
+        user_id: "",
+        session_id: "session-1",
+        extension_id: "graph",
+        status: "succeeded",
+        created_at: "2026-03-13T10:00:00.000Z",
+        updated_at: "2026-03-13T10:00:00.000Z",
+        artifact_json: expect.any(String),
+        error_code: "",
       },
-    ]);
+    });
+    expect(JSON.parse(writes[1]!.row.artifact_json)).toEqual({
+      status: "succeeded",
+      extensionId: "graph",
+      artifactRef: "graph:session-1",
+      result: {
+        action: "open_graph",
+        sessionId: "session-1",
+      },
+    });
+
+    expect(writes.map((entry) => entry.id)).toEqual(["artifact-1", "artifact-1"]);
   });
 
   it("writes failed artifact when extension returns failed status", async () => {

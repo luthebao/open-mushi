@@ -1,11 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionExtensionDefinition } from "./types";
 
+vi.mock("./extensions/graph", () => ({
+  graphExtension: {
+    id: "graph",
+    source: { kind: "built_in" },
+    title: "Knowledge Graph",
+    description: "Generate and open a graph view from transcript context.",
+    icon: "network",
+    capabilities: ["graph"],
+    inputRequirements: ["transcript"],
+    canRun: () => true,
+    run: async () => ({ status: "succeeded", extensionId: "graph" }),
+    openResult: () => {},
+  },
+}));
+
 const makeDefinition = (
   id: string,
   overrides: Partial<SessionExtensionDefinition> = {},
 ): SessionExtensionDefinition => ({
   id,
+  source: { kind: "built_in" },
   title: id,
   description: `${id} description`,
   icon: `${id}-icon`,
@@ -18,6 +34,26 @@ const makeDefinition = (
 });
 
 describe("session insights registry", () => {
+  it("prefers built-in over discovered duplicates", async () => {
+    vi.resetModules();
+    const { registerSessionExtension, listSessionExtensions } = await import("./registry");
+
+    registerSessionExtension(
+      makeDefinition("report", {
+        source: {
+          kind: "skill",
+          skillPath: "/tmp/skills/report/SKILL.md",
+        },
+        title: "Report from Skill",
+      }),
+    );
+
+    const report = listSessionExtensions().find((extension) => extension.id === "report");
+
+    expect(report?.source.kind).toBe("built_in");
+    expect(report?.title).toBe("Report");
+  });
+
   it("registers built-ins and keeps graph metadata complete", async () => {
     vi.resetModules();
     const { listSessionExtensions, registerSessionExtension } = await import("./registry");
@@ -39,6 +75,8 @@ describe("session insights registry", () => {
     expect(listSessionExtensions().map((extension) => extension.id)).toEqual([
       "graph",
       "flashcards",
+      "homework",
+      "report",
     ]);
 
     expect(() =>
@@ -71,9 +109,13 @@ describe("session insights registry", () => {
     const ranked = rankExtensions(listSessionExtensions(), { sessionId: "session-1" });
 
     expect(ranked.map((extension) => extension.id)).toEqual([
+      "graph",
       "runnable",
       "blocked-a",
       "blocked-b",
+      "flashcards",
+      "homework",
+      "report",
     ]);
   });
 });

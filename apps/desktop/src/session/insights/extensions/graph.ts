@@ -38,6 +38,7 @@ async function runGraphExtension(
 
 const graphExtensionDefinition: SessionExtensionDefinition = {
   id: "graph",
+  source: { kind: "built_in" },
   title: "Knowledge Graph",
   description: "Generate and open a graph view from transcript context.",
   icon: "network",
